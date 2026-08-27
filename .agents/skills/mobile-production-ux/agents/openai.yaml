@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mobile Production UX"
+  short_description: "Design fast, safe shop-floor QR transactions"
+  default_prompt: "Use $mobile-production-ux to review this smartphone production flow for speed, clarity, and mistake prevention."

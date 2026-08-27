@@ -1,0 +1,4 @@
+interface:
+  display_name: "Customer Portal Rules"
+  short_description: "Build a secure, focused customer portal"
+  default_prompt: "Use $customer-portal-rules to review this customer portal feature for customer isolation, appropriate production visibility, and project scope."

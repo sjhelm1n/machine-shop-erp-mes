@@ -1,0 +1,4 @@
+interface:
+  display_name: "MES Project Conventions"
+  short_description: "Apply this repository's engineering conventions"
+  default_prompt: "Use $mes-project-conventions to implement this change consistently with the repository's stack and engineering rules."

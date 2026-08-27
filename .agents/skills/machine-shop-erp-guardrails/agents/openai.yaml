@@ -1,0 +1,4 @@
+interface:
+  display_name: "Machine Shop ERP/MES Guardrails"
+  short_description: "Keep the ERP/MES intentionally lightweight"
+  default_prompt: "Use $machine-shop-erp-guardrails to review this change against the project's product and workflow constraints."

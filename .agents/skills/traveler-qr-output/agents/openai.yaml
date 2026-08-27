@@ -1,0 +1,4 @@
+interface:
+  display_name: "Traveler and QR Output"
+  short_description: "Create readable travelers and reliable QR output"
+  default_prompt: "Use $traveler-qr-output to review this Work Order traveler and its routing-step QR codes for readability, print quality, and secure navigation."
