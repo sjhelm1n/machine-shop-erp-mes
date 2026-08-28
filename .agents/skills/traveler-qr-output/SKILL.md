@@ -43,7 +43,6 @@ List routing steps in sequence order. For each step, include:
 - Sequence number
 - Step name
 - Work instructions
-- Revision
 - A QR code unique to that routing step
 
 Do not add or require a separate work-center master. The routing-step name represents the operation or work center.

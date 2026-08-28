@@ -1,6 +1,7 @@
 export type AppRole = 'manufacturer' | 'customer'
 export type PricingType = 'per_piece' | 'flat_rate'
 export type ProductionEventType = 'release' | 'adjustment' | 'transfer' | 'scrap' | 'reversal'
+export type CustomerDocumentType = 'customer_po' | 'invoice' | 'drawing' | 'other'
 
 export interface Organization {
   id: string
@@ -19,6 +20,7 @@ export interface Customer {
   id: string
   organizationId: string
   customerName: string
+  logoUrl: string | null
   primaryAddress: string
   defaultShipToAddress: string
   defaultBillToAddress: string
@@ -37,12 +39,14 @@ export interface SalesOrderLine {
   flatRateAmount: number | null
   lineTotal: number
   sortOrder: number
+  archivedAt: string | null
 }
 
 export interface SalesOrder {
   id: string
   organizationId: string
   salesOrderNumber: string
+  salesOrderName: string
   customerId: string
   customerName: string
   customerAddress: string
@@ -51,6 +55,9 @@ export interface SalesOrder {
   billToAddress: string
   dateReceived: string
   orderDueDate: string
+  shippedAt: string | null
+  invoicedAt: string | null
+  archivedAt: string | null
   notes: string
   lines: SalesOrderLine[]
 }
@@ -62,7 +69,6 @@ export interface RoutingStep {
   routingStepName: string
   customerStageName: string
   workInstructions: string
-  workInstructionsRevision: string | null
   notes: string
 }
 
@@ -70,6 +76,7 @@ export interface WorkOrder {
   id: string
   organizationId: string
   workOrderNumber: string
+  workOrderName: string
   salesOrderId: string
   salesOrderLineItemId: string
   partNumber: string
@@ -77,6 +84,7 @@ export interface WorkOrder {
   dueDate: string
   releasedAt: string
   completionDate: string | null
+  archivedAt: string | null
   notes: string
   routing: RoutingStep[]
   /** Customer-safe aggregate supplied by the portal RPC; raw events stay internal. */
@@ -109,13 +117,14 @@ export interface Question {
   readAt: string | null
 }
 
-export interface Invoice {
+export interface CustomerDocument {
   id: string
   organizationId: string
   customerId: string
   salesOrderId: string | null
-  invoiceNumber: string
-  invoiceDate: string
+  documentType: CustomerDocumentType
+  documentName: string
+  documentDate: string
   amount: number | null
   filePath: string
   uploadedAt: string
@@ -128,5 +137,5 @@ export interface ShopData {
   workOrders: WorkOrder[]
   productionEvents: ProductionEvent[]
   questions: Question[]
-  invoices: Invoice[]
+  documents: CustomerDocument[]
 }

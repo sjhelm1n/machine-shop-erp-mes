@@ -1,4 +1,4 @@
-import type { ProductionEvent, RoutingStep, WorkOrder } from './types'
+import type { ProductionEvent, RoutingStep, SalesOrder, WorkOrder } from './types'
 
 export interface StepMetrics {
   stepId: string
@@ -10,6 +10,12 @@ export interface StepMetrics {
   enteredAt: string | null
   startedAt: string | null
   completedAt: string | null
+}
+
+export interface WorkOrderStageBreakdown {
+  stageName: string
+  quantity: number
+  percentage: number
 }
 
 export function activeProductionEvents(events: ProductionEvent[]): ProductionEvent[] {
@@ -82,12 +88,57 @@ export function workOrderProgress(workOrder: WorkOrder, events: ProductionEvent[
   return Math.min(100, Math.round((processed / (workOrder.quantityOrdered * workOrder.routing.length)) * 100))
 }
 
+export function workOrderStageBreakdown(
+  workOrder: WorkOrder,
+  events: ProductionEvent[],
+): WorkOrderStageBreakdown[] {
+  if (workOrder.quantityOrdered <= 0) return []
+
+  const orderedSteps = [...workOrder.routing].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+  const metrics = calculateStepMetrics(workOrder, events)
+  const stageQuantities = new Map<string, { stageName: string; quantity: number }>()
+
+  const addStageQuantity = (stageName: string, quantity: number) => {
+    const displayName = stageName.trim() || 'In production'
+    const key = displayName.toLocaleLowerCase()
+    const current = stageQuantities.get(key)
+    stageQuantities.set(key, {
+      stageName: current?.stageName ?? displayName,
+      quantity: (current?.quantity ?? 0) + quantity,
+    })
+  }
+
+  orderedSteps.forEach((step, index) => {
+    addStageQuantity(step.customerStageName, metrics[index]?.available ?? 0)
+  })
+
+  const completedQuantity = metrics.at(-1)?.transferred ?? 0
+  addStageQuantity('Complete', completedQuantity)
+
+  const scrappedQuantity = metrics.reduce((sum, metric) => sum + metric.scrapped, 0)
+  const accountedQuantity = metrics.reduce((sum, metric) => sum + metric.available, 0)
+    + completedQuantity
+    + scrappedQuantity
+  const orderReceivedQuantity = Math.max(0, workOrder.quantityOrdered - accountedQuantity)
+  const breakdown = orderReceivedQuantity > 0
+    ? [{ stageName: 'Order received', quantity: orderReceivedQuantity }]
+    : []
+
+  breakdown.push(...stageQuantities.values())
+  if (scrappedQuantity > 0) breakdown.push({ stageName: 'Scrapped', quantity: scrappedQuantity })
+
+  return breakdown.map((stage) => ({
+    ...stage,
+    percentage: Math.round((stage.quantity / workOrder.quantityOrdered) * 100),
+  }))
+}
+
 export function salesOrderProgress(
   workOrders: WorkOrder[],
   events: ProductionEvent[],
   salesOrderId: string,
 ): number {
-  const related = workOrders.filter((workOrder) => workOrder.salesOrderId === salesOrderId)
+  const related = workOrders.filter((workOrder) => workOrder.salesOrderId === salesOrderId && !workOrder.archivedAt)
   const totalWeight = related.reduce((sum, workOrder) => sum + workOrder.quantityOrdered, 0)
   if (totalWeight === 0) return 0
   const weighted = related.reduce(
@@ -95,6 +146,32 @@ export function salesOrderProgress(
     0,
   )
   return Math.min(100, Math.round(weighted / totalWeight))
+}
+
+export interface SalesOrderCompletion {
+  productionCompleted: boolean
+  shipped: boolean
+  invoiced: boolean
+  completed: boolean
+}
+
+export function salesOrderCompletion(
+  order: Pick<SalesOrder, 'id' | 'shippedAt' | 'invoicedAt'>,
+  workOrders: WorkOrder[],
+  events: ProductionEvent[],
+): SalesOrderCompletion {
+  const productionCompleted = salesOrderProgress(workOrders, events, order.id) === 100
+  const shipped = order.shippedAt !== null
+  const invoiced = order.invoicedAt !== null
+  return { productionCompleted, shipped, invoiced, completed: productionCompleted && shipped && invoiced }
+}
+
+export function isSalesOrderCompleted(
+  order: Pick<SalesOrder, 'id' | 'shippedAt' | 'invoicedAt'>,
+  workOrders: WorkOrder[],
+  events: ProductionEvent[],
+): boolean {
+  return salesOrderCompletion(order, workOrders, events).completed
 }
 
 export function customerStage(workOrder: WorkOrder, events: ProductionEvent[]): string {

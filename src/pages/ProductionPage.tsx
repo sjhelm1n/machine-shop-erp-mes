@@ -21,6 +21,7 @@ export function ProductionPage() {
   if (loading) return <main className="production-page"><div className="production-error">Loading production step…</div></main>
   if (loadError) return <main className="production-page"><div className="production-error" role="alert">{loadError}</div></main>
   if (!data || !workOrder || !step || !metric) return <main className="production-page"><div className="production-error">This production link is invalid.</div></main>
+  if (workOrder.archivedAt) return <main className="production-page"><div className="production-error"><p>This work order is archived. Restore it before recording production.</p><Link className="button button-secondary" to={`/app/work-orders/${workOrder.id}`}><ArrowLeft size={17} /> Return to work order</Link></div></main>
 
   const submit = async (type: 'transfer' | 'scrap', amount: number) => {
     if (!canTransfer(amount, metric.available)) { setError(`Enter a whole quantity from 1 to ${metric.available}.`); return }
@@ -34,7 +35,7 @@ export function ProductionPage() {
     <header className="production-header"><Link to={`/app/work-orders/${workOrder.id}`}><ArrowLeft size={19} /> Work order</Link><span>LIVE PRODUCTION</span></header>
     {notice && <div className="transaction-toast"><CheckCircle2 /><span>{notice}{notice.startsWith('Transferred') ? ` to ${next?.routingStepName ?? 'Complete'}` : ''}</span>{lastEventId && <button onClick={() => void undoLast()}><RotateCcw size={16} /> Undo</button>}</div>}
     {error && !modal && <div className="production-action-error" role="alert"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error"><X size={17} /></button></div>}
-    <section className="production-ident"><span>{workOrder.workOrderNumber}</span><h1>{workOrder.partNumber}</h1><div><strong>STEP {step.sequenceNumber}</strong><h2>{step.routingStepName}</h2></div></section>
+    <section className="production-ident"><span>{workOrder.workOrderName}</span><h1>{workOrder.partNumber}</h1><div><strong>STEP {step.sequenceNumber}</strong><h2>{step.routingStepName}</h2></div></section>
     <section className="production-quantity"><span>AVAILABLE HERE</span><strong>{metric.available}</strong><small>pieces</small></section>
     <section className="production-stats"><div><span>Transferred</span><strong>{metric.transferred}</strong></div><div><span>Scrapped</span><strong>{metric.scrapped}</strong></div><div><span>Next</span><strong>{next?.routingStepName ?? 'Complete'}</strong></div></section>
     <section className="production-actions">

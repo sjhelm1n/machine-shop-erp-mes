@@ -54,11 +54,14 @@ Sales Order header includes:
 - Customer name
 - Customer address
 - Sales Order number
+- Sales Order name
 - Customer PO number
 - Ship-to address
 - Bill-to address
 - Date received
 - Order due date
+- Shipment confirmation timestamp
+- Invoice confirmation timestamp
 - Notes
 
 Sales Orders contain:
@@ -77,11 +80,20 @@ Example flat-rate line:
 
 A Sales Order line marked as a manufactured item may create one or more Work Orders.
 
+A Sales Order is complete only when:
+
+- Production progress is 100 percent
+- The manufacturer has marked the externally handled shipment complete
+- The manufacturer has confirmed the customer was invoiced in QuickBooks Online
+
+Keep these as independent conditions. Do not infer shipping or invoicing from production completion, and do not add shipping-carrier or accounting integrations without an explicit request.
+
 ## Work Orders
 
 Work Order fields include:
 
 - WO number
+- WO name
 - Sales Order
 - Sales Order line
 - Part number
@@ -111,7 +123,6 @@ Routing step fields include:
 - Sequence number
 - Routing step name
 - Work instructions
-- Optional work-instruction revision
 - Notes
 
 ## Production Execution

@@ -127,10 +127,6 @@ export async function generateTravelerPdf(workOrder: WorkOrder, salesOrder: Sale
       pdf.setFontSize(firstBlock ? 12 : 9)
       pdf.text(step.routingStepName, margin + 5, y + (firstBlock ? 14 : 13))
       if (firstBlock) {
-        pdf.setFont('helvetica', 'normal')
-        pdf.setFontSize(7.5)
-        pdf.setTextColor(75, 82, 76)
-        pdf.text(`Work instruction revision: ${step.workInstructionsRevision || '—'}`, margin + 5, y + 19)
         pdf.addImage(qr, 'PNG', pageWidth - margin - 37, y + 5, 32, 32)
       }
       pdf.setFont('helvetica', 'normal')

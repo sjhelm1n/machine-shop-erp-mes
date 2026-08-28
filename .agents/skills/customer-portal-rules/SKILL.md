@@ -40,14 +40,18 @@ Do not expose manufacturer-side modules.
 
 Let customers view current and previous orders. Useful Sales Order fields include:
 
-- Sales Order number
+- Sales Order name
 - Customer PO number
 - Date received
 - Order due date
+- Shipping status
+- Invoicing status
 - Completion date when applicable
 - Overall production progress
 
 For manufactured items, show useful production information without exposing unnecessary internal routing detail.
+
+Treat an order as complete only after production is 100 percent complete and the manufacturer has confirmed both shipping and invoicing. Production completion alone must not move an order into completed history.
 
 ### Manufactured Items
 

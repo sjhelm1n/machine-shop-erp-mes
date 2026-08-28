@@ -9,10 +9,10 @@ insert into public.customers(id, organization_id, customer_name, primary_address
   ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'Northstar Robotics', E'1190 Innovation Dr\nAnn Arbor, MI 48108', E'1190 Innovation Dr\nAnn Arbor, MI 48108', E'1190 Innovation Dr\nAnn Arbor, MI 48108')
 on conflict (id) do nothing;
 
-insert into public.sales_orders(id, organization_id, sales_order_number, customer_id, customer_name, customer_address, customer_po_number, ship_to_address, bill_to_address, date_received, order_due_date, notes) values
-  ('30000000-0000-0000-0000-000000001048', '10000000-0000-0000-0000-000000000001', 'SO-1048', '20000000-0000-0000-0000-000000000001', 'Acme Motion Systems', E'4800 Industrial Pkwy\nDetroit, MI 48211', 'PO-77314', E'4800 Industrial Pkwy\nDetroit, MI 48211', E'PO Box 922\nDetroit, MI 48231', '2026-08-11', '2026-08-28', 'Certificate of conformance required.'),
-  ('30000000-0000-0000-0000-000000001051', '10000000-0000-0000-0000-000000000001', 'SO-1051', '20000000-0000-0000-0000-000000000002', 'Northstar Robotics', E'1190 Innovation Dr\nAnn Arbor, MI 48108', 'NS-2026-188', E'1190 Innovation Dr\nAnn Arbor, MI 48108', E'1190 Innovation Dr\nAnn Arbor, MI 48108', '2026-08-18', '2026-09-04', 'Customer pickup when complete.'),
-  ('30000000-0000-0000-0000-000000001039', '10000000-0000-0000-0000-000000000001', 'SO-1039', '20000000-0000-0000-0000-000000000001', 'Acme Motion Systems', E'4800 Industrial Pkwy\nDetroit, MI 48211', 'PO-76891', E'4800 Industrial Pkwy\nDetroit, MI 48211', E'PO Box 922\nDetroit, MI 48231', '2026-07-21', '2026-08-15', '')
+insert into public.sales_orders(id, organization_id, sales_order_number, sales_order_name, customer_id, customer_name, customer_address, customer_po_number, ship_to_address, bill_to_address, date_received, order_due_date, notes) values
+  ('30000000-0000-0000-0000-000000001048', '10000000-0000-0000-0000-000000000001', '1048', '1048', '20000000-0000-0000-0000-000000000001', 'Acme Motion Systems', E'4800 Industrial Pkwy\nDetroit, MI 48211', 'PO-77314', E'4800 Industrial Pkwy\nDetroit, MI 48211', E'PO Box 922\nDetroit, MI 48231', '2026-08-11', '2026-08-28', 'Certificate of conformance required.'),
+  ('30000000-0000-0000-0000-000000001051', '10000000-0000-0000-0000-000000000001', '1051', '1051', '20000000-0000-0000-0000-000000000002', 'Northstar Robotics', E'1190 Innovation Dr\nAnn Arbor, MI 48108', 'NS-2026-188', E'1190 Innovation Dr\nAnn Arbor, MI 48108', E'1190 Innovation Dr\nAnn Arbor, MI 48108', '2026-08-18', '2026-09-04', 'Customer pickup when complete.'),
+  ('30000000-0000-0000-0000-000000001039', '10000000-0000-0000-0000-000000000001', '1039', '1039', '20000000-0000-0000-0000-000000000001', 'Acme Motion Systems', E'4800 Industrial Pkwy\nDetroit, MI 48211', 'PO-76891', E'4800 Industrial Pkwy\nDetroit, MI 48211', E'PO Box 922\nDetroit, MI 48231', '2026-07-21', '2026-08-15', '')
 on conflict (id) do nothing;
 
 insert into public.sales_order_line_items(id, sales_order_id, line_number, part_number, description, manufactured_item, pricing_type, quantity, unit_price, flat_rate_amount, sort_order) values
@@ -22,22 +22,22 @@ insert into public.sales_order_line_items(id, sales_order_id, line_number, part_
   ('40000000-0000-0000-0000-000000103901', '30000000-0000-0000-0000-000000001039', 1, 'ACM-3188', 'Motor mount bracket', true, 'per_piece', 24, 88, null, 10)
 on conflict (id) do nothing;
 
-insert into public.work_orders(id, organization_id, work_order_number, sales_order_id, sales_order_line_item_id, part_number, quantity_ordered, due_date, released_at, completion_date, notes) values
-  ('50000000-0000-0000-0000-000000260824', '10000000-0000-0000-0000-000000000001', 'WO-260824', '30000000-0000-0000-0000-000000001048', '40000000-0000-0000-0000-000000104801', 'ACM-4402', 100, '2026-08-28', '2026-08-12 12:30:00+00', null, 'Use material heat AL-6061-84. Protect cosmetic faces.'),
-  ('50000000-0000-0000-0000-000000260831', '10000000-0000-0000-0000-000000000001', 'WO-260831', '30000000-0000-0000-0000-000000001051', '40000000-0000-0000-0000-000000105101', 'NSR-8810', 48, '2026-09-04', '2026-08-19 13:00:00+00', null, ''),
-  ('50000000-0000-0000-0000-000000260796', '10000000-0000-0000-0000-000000000001', 'WO-260796', '30000000-0000-0000-0000-000000001039', '40000000-0000-0000-0000-000000103901', 'ACM-3188', 24, '2026-08-15', '2026-07-22 12:00:00+00', '2026-08-13', '')
+insert into public.work_orders(id, organization_id, work_order_number, work_order_name, sales_order_id, sales_order_line_item_id, part_number, quantity_ordered, due_date, released_at, completion_date, notes) values
+  ('50000000-0000-0000-0000-000000260824', '10000000-0000-0000-0000-000000000001', '260824', '260824', '30000000-0000-0000-0000-000000001048', '40000000-0000-0000-0000-000000104801', 'ACM-4402', 100, '2026-08-28', '2026-08-12 12:30:00+00', null, 'Use material heat AL-6061-84. Protect cosmetic faces.'),
+  ('50000000-0000-0000-0000-000000260831', '10000000-0000-0000-0000-000000000001', '260831', '260831', '30000000-0000-0000-0000-000000001051', '40000000-0000-0000-0000-000000105101', 'NSR-8810', 48, '2026-09-04', '2026-08-19 13:00:00+00', null, ''),
+  ('50000000-0000-0000-0000-000000260796', '10000000-0000-0000-0000-000000000001', '260796', '260796', '30000000-0000-0000-0000-000000001039', '40000000-0000-0000-0000-000000103901', 'ACM-3188', 24, '2026-08-15', '2026-07-22 12:00:00+00', '2026-08-13', '')
 on conflict (id) do nothing;
 
-insert into public.routing_steps(id, work_order_id, sequence_number, routing_step_name, customer_stage_name, work_instructions, work_instructions_revision) values
-  ('60000000-0000-0000-0000-000000824010', '50000000-0000-0000-0000-000000260824', 10, 'Saw', 'In production', 'Cut 1.75 in 6061 bar to 4.25 in blanks. Deburr sharp edges.', 'A'),
-  ('60000000-0000-0000-0000-000000824020', '50000000-0000-0000-0000-000000260824', 20, 'CNC Mill · Haas VF-2', 'In production', 'Run OP10 and OP20 per setup sheet SS-4402. Verify first article.', 'C'),
-  ('60000000-0000-0000-0000-000000824030', '50000000-0000-0000-0000-000000260824', 30, 'Deburr', 'Finishing', 'Break edges .005–.015. No visible tool marks on face A.', null),
-  ('60000000-0000-0000-0000-000000824040', '50000000-0000-0000-0000-000000260824', 40, 'Final Inspection', 'Inspection', 'Inspect per drawing ACM-4402 Rev F.', 'F'),
-  ('60000000-0000-0000-0000-000000831010', '50000000-0000-0000-0000-000000260831', 10, 'CNC Lathe', 'In production', 'Turn OD and bore. Maintain concentricity within .0008.', 'B'),
-  ('60000000-0000-0000-0000-000000831020', '50000000-0000-0000-0000-000000260831', 20, 'Wash', 'Finishing', 'Aqueous wash and dry.', null),
-  ('60000000-0000-0000-0000-000000831030', '50000000-0000-0000-0000-000000260831', 30, 'Final Inspection', 'Inspection', '100% inspect bore diameter.', 'B'),
-  ('60000000-0000-0000-0000-000000796010', '50000000-0000-0000-0000-000000260796', 10, 'CNC Mill', 'In production', 'Machine complete per drawing.', 'D'),
-  ('60000000-0000-0000-0000-000000796020', '50000000-0000-0000-0000-000000260796', 20, 'Final Inspection', 'Inspection', 'Final inspection per print.', 'D')
+insert into public.routing_steps(id, work_order_id, sequence_number, routing_step_name, customer_stage_name, work_instructions) values
+  ('60000000-0000-0000-0000-000000824010', '50000000-0000-0000-0000-000000260824', 10, 'Saw', 'In production', 'Cut 1.75 in 6061 bar to 4.25 in blanks. Deburr sharp edges.'),
+  ('60000000-0000-0000-0000-000000824020', '50000000-0000-0000-0000-000000260824', 20, 'CNC Mill · Haas VF-2', 'In production', 'Run OP10 and OP20 per setup sheet SS-4402. Verify first article.'),
+  ('60000000-0000-0000-0000-000000824030', '50000000-0000-0000-0000-000000260824', 30, 'Deburr', 'Finishing', 'Break edges .005–.015. No visible tool marks on face A.'),
+  ('60000000-0000-0000-0000-000000824040', '50000000-0000-0000-0000-000000260824', 40, 'Final Inspection', 'Inspection', 'Inspect per drawing ACM-4402 Rev F.'),
+  ('60000000-0000-0000-0000-000000831010', '50000000-0000-0000-0000-000000260831', 10, 'CNC Lathe', 'In production', 'Turn OD and bore. Maintain concentricity within .0008.'),
+  ('60000000-0000-0000-0000-000000831020', '50000000-0000-0000-0000-000000260831', 20, 'Wash', 'Finishing', 'Aqueous wash and dry.'),
+  ('60000000-0000-0000-0000-000000831030', '50000000-0000-0000-0000-000000260831', 30, 'Final Inspection', 'Inspection', '100% inspect bore diameter.'),
+  ('60000000-0000-0000-0000-000000796010', '50000000-0000-0000-0000-000000260796', 10, 'CNC Mill', 'In production', 'Machine complete per drawing.'),
+  ('60000000-0000-0000-0000-000000796020', '50000000-0000-0000-0000-000000260796', 20, 'Final Inspection', 'Inspection', 'Final inspection per print.')
 on conflict (id) do nothing;
 
 -- Events demonstrate overproduction (102 on a 100-piece WO), partial transfer,
@@ -65,6 +65,6 @@ on conflict (id) do nothing;
 
 -- Metadata points to the expected private Storage path. Upload a matching demo PDF
 -- through the application if you want the seeded download action to resolve.
-insert into public.invoices(id, organization_id, customer_id, sales_order_id, invoice_number, invoice_date, amount, file_path, uploaded_at) values
-  ('90000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000001039', 'INV-4382', '2026-08-14', 2112, '10000000-0000-0000-0000-000000000001/20000000-0000-0000-0000-000000000001/INV-4382.pdf', '2026-08-14 16:20:00+00')
+insert into public.customer_documents(id, organization_id, customer_id, sales_order_id, document_type, document_name, document_date, amount, file_path, uploaded_at) values
+  ('90000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000001039', 'invoice', 'INV-4382', '2026-08-14', 2112, '10000000-0000-0000-0000-000000000001/20000000-0000-0000-0000-000000000001/INV-4382.pdf', '2026-08-14 16:20:00+00')
 on conflict (id) do nothing;

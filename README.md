@@ -38,7 +38,7 @@ Supabase is the trusted boundary:
 - Customer portal RPCs return a narrow, pre-aggregated contract; customer sessions cannot select raw sales orders, work orders, routing mappings, prices, notes, or production events.
 - Security-invoker RPCs make multi-row order/work-order creation atomic while retaining RLS.
 - A validation trigger serializes each work order’s production writes and rejects transfers greater than current availability.
-- Storage keeps invoices in a private bucket. Object paths are `organization/customer/random-invoice.pdf` and downloads use 60-second signed URLs.
+- Storage keeps manufacturer-uploaded customer documents in a private PDF-only bucket. Object paths are `organization/customer/random-document.pdf` and previews/downloads use 60-second signed URLs.
 
 There is no custom API server or service-role key in the browser.
 
@@ -155,11 +155,11 @@ In Supabase Auth URL configuration, add local and production redirect URLs for:
 - Every public table has RLS enabled and an explicit operation policy.
 - `anon` has no public-table grants.
 - Manufacturer writes are constrained to the profile’s organization.
-- Customer messages, invoices, and customer-account rows are constrained to the profile’s organization and `customer_id`; order and production summaries come only from customer-safe RPCs.
+- Customer messages, customer documents, and customer-account rows are constrained to the profile’s organization and `customer_id`; order and production summaries come only from customer-safe RPCs.
 - Raw sales orders, line-item prices, work orders, internal routing, portal mappings, and production events have manufacturer-only select policies.
 - Production events have no operator-identity column or update/delete grant and are validated under a per-work-order advisory transaction lock.
 - Customer messages have plain-text database checks, a 2,000-character limit, and only `read_at` is updatable.
-- Invoice uploads require a `.pdf` extension and `application/pdf` MIME type in both browser code and Storage policy. The private bucket has a 10 MB limit.
+- Document uploads are manufacturer-only and require a `.pdf` extension, a PDF file signature, passive content checks, an upload attestation, and `application/pdf` MIME type. The private bucket has a 10 MB limit.
 - Frontend route guards improve UX; RLS and Storage policies provide the real authorization.
 
 The pgTAP file in `supabase/tests/database` checks RLS presence, anonymous grants, customer-vs-manufacturer behavior, safe portal RPC isolation, completion-date privileges, operator-neutral events, and bucket privacy. Pure TypeScript tests cover partial transfers, scrap, one-piece flow, overproduction, reversals, transfer limits, quantity-weighted aggregate progress, customer-safe aggregate overrides, and link-free message sanitization.

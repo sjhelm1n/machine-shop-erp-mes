@@ -9,8 +9,9 @@ const ForgotPasswordPage = lazy(() => import('./pages/AuthPages').then((module) 
 const LoginPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.LoginPage })))
 const UpdatePasswordPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.UpdatePasswordPage })))
 const CustomersPage = lazy(() => import('./pages/CustomersPage').then((module) => ({ default: module.CustomersPage })))
+const CustomerPortalViewPage = lazy(() => import('./pages/CustomerPortalViewPage').then((module) => ({ default: module.CustomerPortalViewPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
-const InvoicesPage = lazy(() => import('./pages/InvoicesPage').then((module) => ({ default: module.InvoicesPage })))
+const DocumentsPage = lazy(() => import('./pages/DocumentsPage').then((module) => ({ default: module.DocumentsPage })))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })))
 const PortalHomePage = lazy(() => import('./pages/PortalHomePage').then((module) => ({ default: module.PortalHomePage })))
 const ProductionPage = lazy(() => import('./pages/ProductionPage').then((module) => ({ default: module.ProductionPage })))
@@ -37,18 +38,21 @@ export default function App() {
     <Route path="/app" element={<ProtectedRoute role="manufacturer"><AppShell /></ProtectedRoute>}>
       <Route index element={<DashboardPage />} />
       <Route path="customers" element={<CustomersPage />} />
+      <Route path="customers/portal-view" element={<CustomerPortalViewPage />} />
       <Route path="sales-orders" element={<SalesOrdersPage />} />
       <Route path="sales-orders/:orderId" element={<SalesOrderDetailPage />} />
       <Route path="work-orders" element={<WorkOrdersPage />} />
       <Route path="work-orders/:workOrderId" element={<WorkOrderDetailPage />} />
       <Route path="questions" element={<QuestionsPage />} />
-      <Route path="invoices" element={<InvoicesPage />} />
+      <Route path="documents" element={<DocumentsPage />} />
+      <Route path="invoices" element={<Navigate to="/app/documents" replace />} />
     </Route>
     <Route path="/portal" element={<ProtectedRoute role="customer"><AppShell /></ProtectedRoute>}>
       <Route index element={<PortalHomePage />} />
       <Route path="orders/:orderId" element={<SalesOrderDetailPage />} />
       <Route path="questions" element={<QuestionsPage />} />
-      <Route path="invoices" element={<InvoicesPage />} />
+      <Route path="documents" element={<DocumentsPage />} />
+      <Route path="invoices" element={<Navigate to="/portal/documents" replace />} />
     </Route>
     <Route path="*" element={<NotFoundPage />} />
   </Routes></Suspense>
