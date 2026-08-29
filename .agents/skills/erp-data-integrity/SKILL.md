@@ -13,7 +13,7 @@ Prevent partial writes, duplicate posting, rounding drift, invalid state transit
 
 ## Contract Ownership
 
-This skill defines **how business-critical writes execute safely**. Use `erp-domain-invariants` to determine what identities, revisions, posted facts, inventory relationships, units, and historical references the operation must preserve. Use `erp-schema-evolution` when implementing the required constraints, tables, views, or RPCs.
+This skill defines **how business-critical writes execute safely**. Use `erp-domain-invariants` to determine what identities, revisions, posted facts, inventory relationships, units, and historical references the operation must preserve. Use `erp-tenant-boundaries` when related records must be proven to belong to the same organization. Use `erp-schema-evolution` when implementing the required constraints, tables, views, or RPCs.
 
 Audit logging does not authorize a mutation. When an operation touches a posted business fact, follow `erp-domain-invariants`: preserve the original event and use an explicit reversal, return, adjustment, or correction when needed.
 

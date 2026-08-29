@@ -97,6 +97,7 @@ Follow all applicable project skills in addition to this one:
 - Use `erp-schema-evolution` when adding or changing indexes, views, RPCs, or derived persistence.
 - Use `erp-data-integrity` for bulk writes, transaction boundaries, quantities, money, and idempotency.
 - Use `erp-access-control` for tenant or company scope, RLS, privileged execution, and exported data.
+- Use `erp-tenant-boundaries` when imports, exports, synchronization, or privileged reports resolve or connect tenant-owned records.
 - Use `erp-extension-contracts` when import or export fields, RPC contracts, or synchronization identifiers are stable external surfaces.
 
 ## Review Checklist

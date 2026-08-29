@@ -98,6 +98,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const profileId = profile?.id ?? null
   const profileRole = profile?.role ?? null
+  const profileOrganizationId = profile?.organizationId ?? null
+  const profileCustomerId = profile?.customerId ?? null
   const profileScope = profile ? `${profile.id}:${profile.organizationId}:${profile.customerId ?? ''}:${profile.role}` : null
   const productionRoute = pathname.startsWith('/produce/')
   const [data, setData] = useState<ShopData | null>(env.demoMode ? refreshDemoToolStatus(structuredClone(demoData)) : null)
@@ -121,19 +123,19 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const completeRequest = (key: string) => pendingRequestIds.current.delete(key)
 
   const refresh = useCallback(async () => {
-    if (env.demoMode || productionRoute || !profileId || !profileRole) return
+    if (env.demoMode || productionRoute || !profileId || !profileRole || !profileOrganizationId) return
     setLoading(true)
-    try { setData(await loadShopData(profileRole, dataLimit.current)); setError(null) }
+    try { setData(await loadShopData(profileRole, profileOrganizationId, profileCustomerId, dataLimit.current)); setError(null) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to load shop data.') }
     finally { setLoading(false) }
-  }, [productionRoute, profileId, profileRole])
+  }, [productionRoute, profileCustomerId, profileId, profileOrganizationId, profileRole])
 
   const loadMore = useCallback(async () => {
-    if (env.demoMode || productionRoute || !profileId || !profileRole) return
+    if (env.demoMode || productionRoute || !profileId || !profileRole || !profileOrganizationId) return
     const nextLimit = dataLimit.current + 100
     setLoading(true)
     try {
-      setData(await loadShopData(profileRole, nextLimit))
+      setData(await loadShopData(profileRole, profileOrganizationId, profileCustomerId, nextLimit))
       dataLimit.current = nextLimit
       setError(null)
     } catch (reason) {
@@ -141,7 +143,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [productionRoute, profileId, profileRole])
+  }, [productionRoute, profileCustomerId, profileId, profileOrganizationId, profileRole])
 
   useEffect(() => {
     const profileChanged = activeProfileScope.current !== profileScope

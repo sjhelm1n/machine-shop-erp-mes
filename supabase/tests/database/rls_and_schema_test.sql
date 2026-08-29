@@ -13,6 +13,18 @@ select has_table('public', 'routing_template_steps', 'routing template steps exi
 select has_table('public', 'customer_messages', 'customer_messages exists');
 select has_table('public', 'customer_documents', 'customer documents exist');
 select has_table('public', 'user_invitations', 'user invitation audit records exist');
+select has_column('public', 'sales_order_line_items', 'organization_id', 'sales-order lines own an explicit tenant boundary');
+select has_column('public', 'routing_steps', 'organization_id', 'work-order routing steps own an explicit tenant boundary');
+select has_column('public', 'routing_template_steps', 'organization_id', 'routing-template steps own an explicit tenant boundary');
+select has_column('public', 'customer_stage_mappings', 'organization_id', 'customer stage mappings own an explicit tenant boundary');
+select is((select is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'sales_order_line_items' and column_name = 'organization_id'), 'NO', 'sales-order line tenant ownership is required');
+select is((select is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'routing_steps' and column_name = 'organization_id'), 'NO', 'routing-step tenant ownership is required');
+select is((select is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'routing_template_steps' and column_name = 'organization_id'), 'NO', 'routing-template-step tenant ownership is required');
+select is((select is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'customer_stage_mappings' and column_name = 'organization_id'), 'NO', 'customer-stage tenant ownership is required');
+select has_trigger('public', 'sales_order_line_items', 'sales_order_line_items_set_organization', 'sales-order line tenant ownership is derived from its trusted parent');
+select has_trigger('public', 'routing_steps', 'routing_steps_set_organization', 'routing-step tenant ownership is derived from its trusted parent');
+select has_trigger('public', 'routing_template_steps', 'routing_template_steps_set_organization', 'routing-template-step tenant ownership is derived from its trusted parent');
+select has_trigger('public', 'customer_stage_mappings', 'customer_stage_mappings_set_organization', 'customer-stage tenant ownership is derived from its trusted parent');
 select has_column('public', 'customers', 'portal_email_domain', 'customers own a portal email-domain boundary');
 select has_column('public', 'profiles', 'email', 'profiles expose the normalized login email to authorized user managers');
 select has_column('public', 'profiles', 'activated_at', 'profiles record invitation activation');
@@ -86,6 +98,22 @@ select ok((select relrowsecurity from pg_class where oid = 'public.routing_templ
 select ok((select relrowsecurity from pg_class where oid = 'public.routing_template_steps'::regclass), 'routing_template_steps has RLS enabled');
 select ok((select relrowsecurity from pg_class where oid = 'public.customer_messages'::regclass), 'customer_messages has RLS enabled');
 select ok((select relrowsecurity from pg_class where oid = 'public.customer_documents'::regclass), 'customer documents have RLS enabled');
+select ok((select relrowsecurity from pg_class where oid = 'public.sales_order_line_items'::regclass), 'sales-order lines have RLS enabled');
+select ok((select relrowsecurity from pg_class where oid = 'public.routing_steps'::regclass), 'routing steps have RLS enabled');
+select ok((select relrowsecurity from pg_class where oid = 'public.customer_stage_mappings'::regclass), 'customer stage mappings have RLS enabled');
+select matches((select qual::text from pg_policies where schemaname = 'public' and tablename = 'sales_order_line_items' and policyname = 'line_items_select'), 'is_manufacturer.*organization_id', 'sales-order line RLS checks the row tenant directly');
+select matches((select qual::text from pg_policies where schemaname = 'public' and tablename = 'routing_steps' and policyname = 'routing_steps_select'), 'is_manufacturer.*organization_id', 'routing-step RLS checks the row tenant directly');
+select matches((select qual::text from pg_policies where schemaname = 'public' and tablename = 'routing_template_steps' and policyname = 'routing_template_steps_select'), 'is_manufacturer.*organization_id', 'routing-template-step RLS checks the row tenant directly');
+select matches((select qual::text from pg_policies where schemaname = 'public' and tablename = 'customer_stage_mappings' and policyname = 'customer_stage_mappings_select'), 'is_manufacturer.*organization_id', 'customer-stage RLS checks the row tenant directly');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.sales_order_line_items'::regclass and conname = 'sales_order_line_items_sales_order_organization_fkey'), 'sales-order lines preserve tenant ownership in their parent foreign key');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.work_orders'::regclass and conname = 'work_orders_line_order_organization_fkey'), 'work orders preserve tenant ownership through their sales-order line relationship');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.routing_steps'::regclass and conname = 'routing_steps_work_order_organization_fkey'), 'routing steps preserve tenant ownership in their work-order foreign key');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.customer_stage_mappings'::regclass and conname = 'customer_stage_mappings_step_work_order_organization_fkey'), 'customer stage mappings preserve tenant and work-order ownership');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.routing_operation_tools'::regclass and conname = 'routing_operation_tools_operation_organization_fkey'), 'routing tooling preserves tenant ownership in its operation relationship');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.work_order_operation_tools'::regclass and conname = 'work_order_operation_tools_source_organization_fkey'), 'copied work-order tooling preserves tenant ownership in its source relationship');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.production_events'::regclass and conname = 'production_events_routing_step_work_order_organization_fkey'), 'production events preserve tenant and work-order ownership in routing references');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.production_events'::regclass and conname = 'production_events_reversed_event_organization_fkey'), 'production reversals preserve tenant ownership in their source reference');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.profiles'::regclass and conname = 'profiles_customer_organization_fkey'), 'customer profiles preserve tenant ownership in their customer relationship');
 select matches((select with_check::text from pg_policies where schemaname = 'public' and tablename = 'customer_documents' and policyname = 'customer_documents_insert'), 'manufacturer-document-upload-v1', 'document inserts require the current manufacturer attestation');
 select matches((select qual::text from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'invoice_objects_select'), 'customer_documents', 'private object access resolves through customer document metadata');
 
@@ -207,7 +235,8 @@ insert into public.organizations(id, name, account_claim_name) values ('10000000
 insert into public.organizations(id, name, account_claim_name) values ('10000000-0000-0000-0000-000000000096', 'New super-admin test shop', 'new super-admin test shop');
 insert into public.customers(id, organization_id, customer_name, portal_email_domain) values
   ('20000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', 'Customer A', 'customera.com'),
-  ('20000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', 'Customer B', 'customerb.com');
+  ('20000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', 'Customer B', 'customerb.com'),
+  ('20000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', 'Other Tenant Customer', 'other-tenant.test');
 insert into public.profiles(id, organization_id, customer_id, email, display_name, role, is_super_admin, activated_at) values
   ('30000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', 'portal-a@customera.com', 'Portal A', 'customer', false, now()),
   ('30000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', 'coworker@customera.com', 'Portal A Coworker', 'customer', false, now()),
@@ -217,21 +246,31 @@ insert into public.profiles(id, organization_id, customer_id, email, display_nam
   ('30000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', null, 'other-shop@rlstest.com', 'Other Shop User', 'manufacturer', true, now());
 insert into public.sales_orders(id, organization_id, sales_order_number, sales_order_name, customer_id, customer_name, customer_po_number, date_received, order_due_date) values
   ('40000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', 'SO-A', 'SO-A', '20000000-0000-0000-0000-000000000091', 'Customer A', 'PO-A', current_date, current_date + 7),
-  ('40000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', 'SO-B', 'SO-B', '20000000-0000-0000-0000-000000000092', 'Customer B', 'PO-B', current_date, current_date + 7);
-insert into public.sales_order_line_items(id, sales_order_id, line_number, part_number, description, manufactured_item, pricing_type, quantity, unit_price, sort_order) values
-  ('50000000-0000-0000-0000-000000000091', '40000000-0000-0000-0000-000000000091', 1, 'PART-A', 'Customer A part', true, 'per_piece', 10, 99.00, 1),
-  ('50000000-0000-0000-0000-000000000092', '40000000-0000-0000-0000-000000000092', 1, 'PART-B', 'Customer B part', true, 'per_piece', 10, 199.00, 1);
+  ('40000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', 'SO-B', 'SO-B', '20000000-0000-0000-0000-000000000092', 'Customer B', 'PO-B', current_date, current_date + 7),
+  ('40000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', 'SO-OTHER', 'SO-OTHER', '20000000-0000-0000-0000-000000000098', 'Other Tenant Customer', 'PO-OTHER', current_date, current_date + 7);
+insert into public.sales_order_line_items(id, organization_id, sales_order_id, line_number, part_number, description, manufactured_item, pricing_type, quantity, unit_price, sort_order) values
+  ('50000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '40000000-0000-0000-0000-000000000091', 1, 'PART-A', 'Customer A part', true, 'per_piece', 10, 99.00, 1),
+  ('50000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', '40000000-0000-0000-0000-000000000092', 1, 'PART-B', 'Customer B part', true, 'per_piece', 10, 199.00, 1),
+  ('50000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', '40000000-0000-0000-0000-000000000098', 1, 'PART-OTHER', 'Other tenant part', true, 'per_piece', 10, 299.00, 1);
 insert into public.work_orders(id, organization_id, work_order_number, work_order_name, sales_order_id, sales_order_line_item_id, part_number, quantity_ordered, due_date) values
   ('60000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', 'WO-A', 'WO-A', '40000000-0000-0000-0000-000000000091', '50000000-0000-0000-0000-000000000091', 'PART-A', 10, current_date + 7),
-  ('60000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', 'WO-B', 'WO-B', '40000000-0000-0000-0000-000000000092', '50000000-0000-0000-0000-000000000092', 'PART-B', 10, current_date + 7);
-insert into public.routing_steps(id, work_order_id, sequence_number, routing_step_name, customer_stage_name) values
-  ('70000000-0000-4000-a000-000000000091', '60000000-0000-0000-0000-000000000091', 10, 'Secret A operation', 'In production'),
-  ('70000000-0000-4000-a000-000000000092', '60000000-0000-0000-0000-000000000092', 10, 'Secret B operation', 'In production');
-insert into public.customer_stage_mappings(routing_step_id, work_order_id, sequence_number, customer_stage_name) values
-  ('70000000-0000-4000-a000-000000000091', '60000000-0000-0000-0000-000000000091', 10, 'In production'),
-  ('70000000-0000-4000-a000-000000000092', '60000000-0000-0000-0000-000000000092', 10, 'In production');
+  ('60000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', 'WO-B', 'WO-B', '40000000-0000-0000-0000-000000000092', '50000000-0000-0000-0000-000000000092', 'PART-B', 10, current_date + 7),
+  ('60000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', 'WO-OTHER', 'WO-OTHER', '40000000-0000-0000-0000-000000000098', '50000000-0000-0000-0000-000000000098', 'PART-OTHER', 10, current_date + 7);
+insert into public.routing_steps(id, organization_id, work_order_id, sequence_number, routing_step_name, customer_stage_name) values
+  ('70000000-0000-4000-a000-000000000091', '10000000-0000-0000-0000-000000000099', '60000000-0000-0000-0000-000000000091', 10, 'Secret A operation', 'In production'),
+  ('70000000-0000-4000-a000-000000000092', '10000000-0000-0000-0000-000000000099', '60000000-0000-0000-0000-000000000092', 10, 'Secret B operation', 'In production'),
+  ('70000000-0000-4000-a000-000000000098', '10000000-0000-0000-0000-000000000098', '60000000-0000-0000-0000-000000000098', 10, 'Other tenant operation', 'In production');
+insert into public.customer_stage_mappings(routing_step_id, organization_id, work_order_id, sequence_number, customer_stage_name) values
+  ('70000000-0000-4000-a000-000000000091', '10000000-0000-0000-0000-000000000099', '60000000-0000-0000-0000-000000000091', 10, 'In production'),
+  ('70000000-0000-4000-a000-000000000092', '10000000-0000-0000-0000-000000000099', '60000000-0000-0000-0000-000000000092', 10, 'In production'),
+  ('70000000-0000-4000-a000-000000000098', '10000000-0000-0000-0000-000000000098', '60000000-0000-0000-0000-000000000098', 10, 'In production');
+insert into public.routing_templates(id, organization_id, template_name) values
+  ('b0000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', 'Other tenant template');
+insert into public.routing_template_steps(id, organization_id, routing_template_id, sequence_number, routing_step_name, customer_stage_name) values
+  ('b1000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', 'b0000000-0000-0000-0000-000000000098', 10, 'Other tenant template step', 'In production');
 insert into public.production_events(id, organization_id, work_order_id, routing_step_id, event_type, quantity, to_routing_step_id) values
-  ('80000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '60000000-0000-0000-0000-000000000091', '70000000-0000-4000-a000-000000000091', 'release', 10, '70000000-0000-4000-a000-000000000091');
+  ('80000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '60000000-0000-0000-0000-000000000091', '70000000-0000-4000-a000-000000000091', 'release', 10, '70000000-0000-4000-a000-000000000091'),
+  ('80000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', '60000000-0000-0000-0000-000000000098', '70000000-0000-4000-a000-000000000098', 'release', 10, '70000000-0000-4000-a000-000000000098');
 insert into public.customer_messages(id, organization_id, customer_id, sales_order_id, sender_type, sender_display_name, message) values
   ('90000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', '40000000-0000-0000-0000-000000000091', 'customer', 'Portal A', 'Question A'),
   ('90000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000092', '40000000-0000-0000-0000-000000000092', 'customer', 'Portal B', 'Question B');
@@ -291,7 +330,11 @@ select throws_ok(
   'customer user cannot grant manufacturer access'
 );
 select is((select count(*)::integer from public.sales_orders), 0, 'customer cannot query raw sales orders');
+select is((select count(*)::integer from public.sales_order_line_items), 0, 'customer cannot query raw sales-order lines');
 select is((select count(*)::integer from public.production_events), 0, 'customer cannot query raw production events');
+select is((select count(*)::integer from public.routing_steps), 0, 'customer cannot query internal routing steps');
+select is((select count(*)::integer from public.routing_template_steps), 0, 'customer cannot query internal routing-template steps');
+select is((select count(*)::integer from public.customer_stage_mappings), 0, 'customer cannot query raw customer-stage mappings');
 select is((select count(*)::integer from public.work_order_step_metrics(array['60000000-0000-0000-0000-000000000091'::uuid])), 0, 'customer cannot derive internal work-order metrics');
 select is((select count(*)::integer from public.audit_log), 0, 'customer cannot query organization audit history');
 select is((select count(*)::integer from public.routing_templates), 0, 'customer cannot query internal routing templates');
@@ -361,6 +404,10 @@ select throws_ok(
   'manufacturer customer invitation still enforces the configured company domain'
 );
 select is((select count(*)::integer from public.sales_orders), 2, 'manufacturer can query organization sales orders');
+select is((select count(*)::integer from public.sales_order_line_items), 2, 'manufacturer sees only organization sales-order lines');
+select is((select count(*)::integer from public.routing_steps), 2, 'manufacturer sees only organization routing steps');
+select is((select count(*)::integer from public.customer_stage_mappings), 2, 'manufacturer sees only organization customer-stage mappings');
+select is((select count(*)::integer from public.routing_template_steps), 0, 'manufacturer cannot see another organization routing-template steps');
 select is(
   jsonb_array_length(public.dashboard_metrics(null, null, 'month')->'revenueByCustomer'),
   2,
@@ -594,6 +641,32 @@ select ok(
 );
 reset role;
 
+-- Privileged paths bypass RLS, so tenant consistency must still fail closed at
+-- the trigger and relational boundaries.
+select throws_ok(
+  $$insert into public.sales_order_line_items(organization_id, sales_order_id, line_number, part_number, description, manufactured_item, pricing_type, quantity, unit_price, sort_order) values ('10000000-0000-0000-0000-000000000099', '40000000-0000-0000-0000-000000000098', 99, 'CROSS-TENANT', 'Rejected line', true, 'per_piece', 1, 1, 99)$$,
+  '23514',
+  'Sales-order line organization must match its sales order',
+  'a privileged insert cannot attach a sales-order line to another tenant'
+);
+select throws_ok(
+  $$insert into public.routing_steps(organization_id, work_order_id, sequence_number, routing_step_name, customer_stage_name) values ('10000000-0000-0000-0000-000000000099', '60000000-0000-0000-0000-000000000098', 99, 'Cross-tenant step', 'In production')$$,
+  '23514',
+  'Routing-step organization must match its work order',
+  'a privileged insert cannot attach a routing step to another tenant'
+);
+select throws_ok(
+  $$insert into public.routing_template_steps(organization_id, routing_template_id, sequence_number, routing_step_name, customer_stage_name) values ('10000000-0000-0000-0000-000000000099', 'b0000000-0000-0000-0000-000000000098', 99, 'Cross-tenant template step', 'In production')$$,
+  '23514',
+  'Routing-template step organization must match its template',
+  'a privileged insert cannot attach a routing-template step to another tenant'
+);
+select throws_ok(
+  $$insert into public.customer_stage_mappings(organization_id, routing_step_id, work_order_id, sequence_number, customer_stage_name) values ('10000000-0000-0000-0000-000000000099', '70000000-0000-4000-a000-000000000098', '60000000-0000-0000-0000-000000000098', 99, 'Cross-tenant stage')$$,
+  '23514',
+  'Customer stage mapping organization must match its work order',
+  'a privileged insert cannot attach a customer-stage mapping to another tenant'
+);
 -- Self-service organization creation is a single, verified and company-scoped
 -- transaction. These identities deliberately have no pre-existing profiles.
 set local session_replication_role = replica;

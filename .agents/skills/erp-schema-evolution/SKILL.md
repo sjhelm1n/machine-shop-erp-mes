@@ -16,6 +16,7 @@ Make the database the reliable system-of-record contract for ERP data while keep
 This skill defines **how database structures evolve and enforce requirements**. It does not define the ERP invariants themselves:
 
 - Use `erp-domain-invariants` to determine the stable identities, exact revisions, posted-history rules, inventory relationships, units, and master-data retention the schema must preserve.
+- Use `erp-tenant-boundaries` to determine when tenant-owned tables require direct `organization_id`, composite same-tenant foreign keys, organization-scoped uniqueness, and cross-tenant mismatch tests.
 - Use `erp-data-integrity` to design atomic and idempotent business writes that use the schema.
 - Use `erp-auditability` when the change must capture tamper-resistant evidence of permitted business actions.
 

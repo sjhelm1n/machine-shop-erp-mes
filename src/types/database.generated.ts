@@ -226,36 +226,39 @@ export type Database = {
       customer_stage_mappings: {
         Row: {
           customer_stage_name: string
+          organization_id: string
           routing_step_id: string
           sequence_number: number
           work_order_id: string
         }
         Insert: {
           customer_stage_name: string
+          organization_id: string
           routing_step_id: string
           sequence_number: number
           work_order_id: string
         }
         Update: {
           customer_stage_name?: string
+          organization_id?: string
           routing_step_id?: string
           sequence_number?: number
           work_order_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "customer_stage_mappings_routing_step_id_fkey"
-            columns: ["routing_step_id"]
-            isOneToOne: true
+            foreignKeyName: "customer_stage_mappings_step_work_order_organization_fkey"
+            columns: ["routing_step_id", "work_order_id", "organization_id"]
+            isOneToOne: false
             referencedRelation: "routing_steps"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "work_order_id", "organization_id"]
           },
           {
-            foreignKeyName: "customer_stage_mappings_work_order_id_fkey"
-            columns: ["work_order_id"]
+            foreignKeyName: "customer_stage_mappings_work_order_organization_fkey"
+            columns: ["work_order_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "work_orders"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "organization_id"]
           },
         ]
       }
@@ -384,11 +387,15 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "production_events_from_routing_step_id_fkey"
-            columns: ["from_routing_step_id"]
+            foreignKeyName: "production_events_from_step_work_order_organization_fkey"
+            columns: [
+              "from_routing_step_id",
+              "work_order_id",
+              "organization_id",
+            ]
             isOneToOne: false
             referencedRelation: "routing_steps"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "work_order_id", "organization_id"]
           },
           {
             foreignKeyName: "production_events_organization_id_fkey"
@@ -398,25 +405,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "production_events_reversed_event_id_fkey"
-            columns: ["reversed_event_id"]
-            isOneToOne: true
+            foreignKeyName: "production_events_reversed_event_organization_fkey"
+            columns: ["reversed_event_id", "organization_id"]
+            isOneToOne: false
             referencedRelation: "production_events"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "organization_id"]
           },
           {
-            foreignKeyName: "production_events_routing_step_id_fkey"
-            columns: ["routing_step_id"]
+            foreignKeyName: "production_events_routing_step_work_order_organization_fkey"
+            columns: ["routing_step_id", "work_order_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "routing_steps"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "work_order_id", "organization_id"]
           },
           {
-            foreignKeyName: "production_events_to_routing_step_id_fkey"
-            columns: ["to_routing_step_id"]
+            foreignKeyName: "production_events_to_step_work_order_organization_fkey"
+            columns: ["to_routing_step_id", "work_order_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "routing_steps"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "work_order_id", "organization_id"]
           },
           {
             foreignKeyName: "production_events_work_order_id_organization_id_fkey"
@@ -475,11 +482,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "profiles_customer_id_fkey"
-            columns: ["customer_id"]
+            foreignKeyName: "profiles_customer_organization_fkey"
+            columns: ["customer_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "customers"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "organization_id"]
           },
           {
             foreignKeyName: "profiles_organization_id_fkey"
@@ -526,17 +533,17 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "routing_operation_tools_operation_organization_fkey"
+            columns: ["routing_operation_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "routing_template_steps"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
             foreignKeyName: "routing_operation_tools_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "routing_operation_tools_routing_operation_id_fkey"
-            columns: ["routing_operation_id"]
-            isOneToOne: false
-            referencedRelation: "routing_template_steps"
             referencedColumns: ["id"]
           },
           {
@@ -561,6 +568,7 @@ export type Database = {
           customer_stage_name: string
           id: string
           notes: string
+          organization_id: string
           routing_step_name: string
           sequence_number: number
           updated_at: string
@@ -572,6 +580,7 @@ export type Database = {
           customer_stage_name?: string
           id?: string
           notes?: string
+          organization_id: string
           routing_step_name: string
           sequence_number: number
           updated_at?: string
@@ -583,6 +592,7 @@ export type Database = {
           customer_stage_name?: string
           id?: string
           notes?: string
+          organization_id?: string
           routing_step_name?: string
           sequence_number?: number
           updated_at?: string
@@ -591,11 +601,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "routing_steps_work_order_id_fkey"
-            columns: ["work_order_id"]
+            foreignKeyName: "routing_steps_work_order_organization_fkey"
+            columns: ["work_order_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "work_orders"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "organization_id"]
           },
         ]
       }
@@ -604,6 +614,7 @@ export type Database = {
           created_at: string
           customer_stage_name: string
           id: string
+          organization_id: string
           routing_step_name: string
           routing_template_id: string
           sequence_number: number
@@ -614,6 +625,7 @@ export type Database = {
           created_at?: string
           customer_stage_name: string
           id?: string
+          organization_id: string
           routing_step_name: string
           routing_template_id: string
           sequence_number: number
@@ -624,6 +636,7 @@ export type Database = {
           created_at?: string
           customer_stage_name?: string
           id?: string
+          organization_id?: string
           routing_step_name?: string
           routing_template_id?: string
           sequence_number?: number
@@ -632,11 +645,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "routing_template_steps_routing_template_id_fkey"
-            columns: ["routing_template_id"]
+            foreignKeyName: "routing_template_steps_template_organization_fkey"
+            columns: ["routing_template_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "routing_templates"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "organization_id"]
           },
         ]
       }
@@ -687,6 +700,7 @@ export type Database = {
           line_number: number
           line_total: number | null
           manufactured_item: boolean
+          organization_id: string
           part_number: string | null
           pricing_type: string
           quantity: number
@@ -706,6 +720,7 @@ export type Database = {
           line_number: number
           line_total?: number | null
           manufactured_item?: boolean
+          organization_id: string
           part_number?: string | null
           pricing_type: string
           quantity?: number
@@ -725,6 +740,7 @@ export type Database = {
           line_number?: number
           line_total?: number | null
           manufactured_item?: boolean
+          organization_id?: string
           part_number?: string | null
           pricing_type?: string
           quantity?: number
@@ -735,11 +751,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "sales_order_line_items_sales_order_id_fkey"
-            columns: ["sales_order_id"]
+            foreignKeyName: "sales_order_line_items_sales_order_organization_fkey"
+            columns: ["sales_order_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "sales_orders"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "organization_id"]
           },
         ]
       }
@@ -1044,6 +1060,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "work_order_operation_tools_operation_organization_fkey"
+            columns: ["work_order_operation_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "routing_steps"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
             foreignKeyName: "work_order_operation_tools_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
@@ -1051,11 +1074,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "work_order_operation_tools_source_routing_operation_tool_i_fkey"
-            columns: ["source_routing_operation_tool_id"]
+            foreignKeyName: "work_order_operation_tools_source_organization_fkey"
+            columns: ["source_routing_operation_tool_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "routing_operation_tools"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "organization_id"]
           },
           {
             foreignKeyName: "work_order_operation_tools_tool_assembly_id_organization_i_fkey"
@@ -1070,13 +1093,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tool_assembly_status"
             referencedColumns: ["tool_assembly_id", "organization_id"]
-          },
-          {
-            foreignKeyName: "work_order_operation_tools_work_order_operation_id_fkey"
-            columns: ["work_order_operation_id"]
-            isOneToOne: false
-            referencedRelation: "routing_steps"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -1140,6 +1156,17 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "work_orders_line_order_organization_fkey"
+            columns: [
+              "sales_order_line_item_id",
+              "sales_order_id",
+              "organization_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "sales_order_line_items"
+            referencedColumns: ["id", "sales_order_id", "organization_id"]
+          },
+          {
             foreignKeyName: "work_orders_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
@@ -1159,20 +1186,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "sales_orders"
             referencedColumns: ["id", "organization_id"]
-          },
-          {
-            foreignKeyName: "work_orders_sales_order_line_item_id_fkey"
-            columns: ["sales_order_line_item_id"]
-            isOneToOne: false
-            referencedRelation: "sales_order_line_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "work_orders_sales_order_line_item_id_sales_order_id_fkey"
-            columns: ["sales_order_line_item_id", "sales_order_id"]
-            isOneToOne: false
-            referencedRelation: "sales_order_line_items"
-            referencedColumns: ["id", "sales_order_id"]
           },
         ]
       }

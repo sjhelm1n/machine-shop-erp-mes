@@ -57,19 +57,19 @@ function senderType(value: string): AppRole {
   return value
 }
 
-export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): Promise<ShopData> {
-  if (role === 'customer') return loadCustomerPortalData(limit)
+export async function loadShopData(role: AppRole, organizationId: string, customerId: string | null, limit = DEFAULT_DATA_LIMIT): Promise<ShopData> {
+  if (role === 'customer') return loadCustomerPortalData(organizationId, customerId, limit)
   const client = requireSupabase()
   const [organization, templatesResult, customersResult, salesOrdersResult, workOrdersResult, questionsResult, documentsResult, toolsResult, checkoutResult] = await Promise.all([
-    client.from('organizations').select('id, name, plant_timezone').single(),
-    client.from('routing_templates').select('id, organization_id, template_name, archived_at').order('template_name').order('id'),
-    client.from('customers').select('id, organization_id, customer_name, logo_url, portal_email_domain, primary_address, default_ship_to_address, default_bill_to_address').order('customer_name').order('id').limit(limit + 1),
-    client.from('sales_orders').select('id, organization_id, sales_order_number, sales_order_name, customer_id, customer_name, customer_address, customer_po_number, ship_to_address, bill_to_address, date_received, order_due_date, shipped_at, invoiced_at, archived_at, notes').order('date_received', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
-    client.from('work_orders').select('id, organization_id, work_order_number, work_order_name, sales_order_id, sales_order_line_item_id, part_number, quantity_ordered, due_date, released_at, completion_date, archived_at, notes').order('due_date').order('id').limit(limit + 1),
-    client.from('customer_messages').select('id, organization_id, customer_id, sales_order_id, sender_type, sender_display_name, message, created_at, read_at').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
-    client.from('customer_documents').select('id, organization_id, customer_id, sales_order_id, document_type, document_name, document_date, amount, file_path, uploaded_at').order('document_date', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
-    client.from('tool_assemblies').select('id, organization_id, assembly_number, description, notes, image_path, archived_at, created_at, updated_at').order('assembly_number').order('id').limit(limit + 1),
-    client.from('tool_checkout_transactions').select('id, organization_id, tool_assembly_id, transaction_type, note, actor_id, actor_display_name, created_at').order('event_sequence', { ascending: false }).limit(250),
+    client.from('organizations').select('id, name, plant_timezone').eq('id', organizationId).single(),
+    client.from('routing_templates').select('id, organization_id, template_name, archived_at').eq('organization_id', organizationId).order('template_name').order('id'),
+    client.from('customers').select('id, organization_id, customer_name, logo_url, portal_email_domain, primary_address, default_ship_to_address, default_bill_to_address').eq('organization_id', organizationId).order('customer_name').order('id').limit(limit + 1),
+    client.from('sales_orders').select('id, organization_id, sales_order_number, sales_order_name, customer_id, customer_name, customer_address, customer_po_number, ship_to_address, bill_to_address, date_received, order_due_date, shipped_at, invoiced_at, archived_at, notes').eq('organization_id', organizationId).order('date_received', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
+    client.from('work_orders').select('id, organization_id, work_order_number, work_order_name, sales_order_id, sales_order_line_item_id, part_number, quantity_ordered, due_date, released_at, completion_date, archived_at, notes').eq('organization_id', organizationId).order('due_date').order('id').limit(limit + 1),
+    client.from('customer_messages').select('id, organization_id, customer_id, sales_order_id, sender_type, sender_display_name, message, created_at, read_at').eq('organization_id', organizationId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
+    client.from('customer_documents').select('id, organization_id, customer_id, sales_order_id, document_type, document_name, document_date, amount, file_path, uploaded_at').eq('organization_id', organizationId).order('document_date', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
+    client.from('tool_assemblies').select('id, organization_id, assembly_number, description, notes, image_path, archived_at, created_at, updated_at').eq('organization_id', organizationId).order('assembly_number').order('id').limit(limit + 1),
+    client.from('tool_checkout_transactions').select('id, organization_id, tool_assembly_id, transaction_type, note, actor_id, actor_display_name, created_at').eq('organization_id', organizationId).order('event_sequence', { ascending: false }).limit(250),
   ])
   const firstError = [organization, templatesResult, customersResult, salesOrdersResult, workOrdersResult, questionsResult, documentsResult, toolsResult, checkoutResult].find((result) => result.error)?.error
   if (firstError) throw firstError
@@ -86,16 +86,16 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
   const routingTemplateIds = (templatesResult.data ?? []).map((row) => row.id)
   const [linesResult, routingResult, metricsResult, templateStepsResult] = await Promise.all([
     salesOrderIds.length
-      ? client.from('sales_order_line_items').select('id, sales_order_id, line_number, part_number, description, manufactured_item, pricing_type, quantity, unit_price, flat_rate_amount, line_total, sort_order, archived_at').in('sales_order_id', salesOrderIds).order('sales_order_id').order('sort_order').order('id')
+      ? client.from('sales_order_line_items').select('id, sales_order_id, line_number, part_number, description, manufactured_item, pricing_type, quantity, unit_price, flat_rate_amount, line_total, sort_order, archived_at').eq('organization_id', organizationId).in('sales_order_id', salesOrderIds).order('sales_order_id').order('sort_order').order('id')
       : Promise.resolve({ data: [], error: null }),
     workOrderIds.length
-      ? client.from('routing_steps').select('id, work_order_id, sequence_number, routing_step_name, customer_stage_name, work_instructions, notes').in('work_order_id', workOrderIds).order('work_order_id').order('sequence_number').order('id')
+      ? client.from('routing_steps').select('id, work_order_id, sequence_number, routing_step_name, customer_stage_name, work_instructions, notes').eq('organization_id', organizationId).in('work_order_id', workOrderIds).order('work_order_id').order('sequence_number').order('id')
       : Promise.resolve({ data: [], error: null }),
     workOrderIds.length
       ? client.rpc('work_order_step_metrics', { p_work_order_ids: workOrderIds })
       : Promise.resolve({ data: [], error: null }),
     routingTemplateIds.length
-      ? client.from('routing_template_steps').select('id, routing_template_id, sequence_number, routing_step_name, customer_stage_name, work_instructions').in('routing_template_id', routingTemplateIds).order('routing_template_id').order('sequence_number').order('id')
+      ? client.from('routing_template_steps').select('id, routing_template_id, sequence_number, routing_step_name, customer_stage_name, work_instructions').eq('organization_id', organizationId).in('routing_template_id', routingTemplateIds).order('routing_template_id').order('sequence_number').order('id')
       : Promise.resolve({ data: [], error: null }),
   ])
   const dependencyError = [linesResult, routingResult, metricsResult, templateStepsResult].find((result) => result.error)?.error
@@ -105,10 +105,10 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
   const workOrderOperationIds = (routingResult.data ?? []).map((row) => row.id)
   const [routingToolsResult, workOrderToolsResult] = await Promise.all([
     routingOperationIds.length
-      ? client.from('routing_operation_tools').select('id, routing_operation_id, tool_assembly_id, tool_number, notes, sequence_number').in('routing_operation_id', routingOperationIds).order('routing_operation_id').order('sequence_number').order('id')
+      ? client.from('routing_operation_tools').select('id, routing_operation_id, tool_assembly_id, tool_number, notes, sequence_number').eq('organization_id', organizationId).in('routing_operation_id', routingOperationIds).order('routing_operation_id').order('sequence_number').order('id')
       : Promise.resolve({ data: [], error: null }),
     workOrderOperationIds.length
-      ? client.from('work_order_operation_tools').select('id, work_order_operation_id, tool_assembly_id, tool_number, notes, sequence_number, source_routing_operation_tool_id').in('work_order_operation_id', workOrderOperationIds).order('work_order_operation_id').order('sequence_number').order('id')
+      ? client.from('work_order_operation_tools').select('id, work_order_operation_id, tool_assembly_id, tool_number, notes, sequence_number, source_routing_operation_tool_id').eq('organization_id', organizationId).in('work_order_operation_id', workOrderOperationIds).order('work_order_operation_id').order('sequence_number').order('id')
       : Promise.resolve({ data: [], error: null }),
   ])
   const toolingError = [routingToolsResult, workOrderToolsResult].find((result) => result.error)?.error
@@ -121,12 +121,12 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
   const loadedToolIds = new Set((toolsResult.data ?? []).map((tool) => tool.id))
   const missingToolIds = referencedToolIds.filter((id) => !loadedToolIds.has(id))
   const missingToolResults = await Promise.all(Array.from({ length: Math.ceil(missingToolIds.length / 100) }, (_, index) =>
-    client.from('tool_assemblies').select('id, organization_id, assembly_number, description, notes, image_path, archived_at, created_at, updated_at').in('id', missingToolIds.slice(index * 100, (index + 1) * 100))))
+    client.from('tool_assemblies').select('id, organization_id, assembly_number, description, notes, image_path, archived_at, created_at, updated_at').eq('organization_id', organizationId).in('id', missingToolIds.slice(index * 100, (index + 1) * 100))))
   const missingToolError = missingToolResults.find((result) => result.error)?.error
   if (missingToolError) throw missingToolError
   const displayedToolIds = tools.rows.map((tool) => tool.id)
   const toolStatusResult = displayedToolIds.length
-    ? await client.from('tool_assembly_status').select('tool_assembly_id, organization_id, quantity_checked_out, quantity_in_use, future_requirements, usage_warning').in('tool_assembly_id', displayedToolIds)
+    ? await client.from('tool_assembly_status').select('tool_assembly_id, organization_id, quantity_checked_out, quantity_in_use, future_requirements, usage_warning').eq('organization_id', organizationId).in('tool_assembly_id', displayedToolIds)
     : { data: [], error: null }
   if (toolStatusResult.error) throw toolStatusResult.error
   const imagePaths = tools.rows.flatMap((tool) => tool.image_path ? [tool.image_path] : [])
@@ -173,16 +173,17 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
   }
 }
 
-async function loadCustomerPortalData(limit: number): Promise<ShopData> {
+async function loadCustomerPortalData(organizationId: string, customerId: string | null, limit: number): Promise<ShopData> {
+  if (!customerId) throw new Error('No customer account is connected to this profile.')
   const client = requireSupabase()
   const [organization, customers, salesOrders, lines, workOrders, questions, documents] = await Promise.all([
-    client.from('organizations').select('id, name, plant_timezone').single(),
-    client.from('customers').select('id, organization_id, customer_name').single(),
+    client.from('organizations').select('id, name, plant_timezone').eq('id', organizationId).single(),
+    client.from('customers').select('id, organization_id, customer_name').eq('organization_id', organizationId).eq('id', customerId).single(),
     client.rpc('customer_portal_sales_orders'),
     client.rpc('customer_portal_sales_order_lines'),
     client.rpc('customer_portal_work_orders'),
-    client.from('customer_messages').select('id, organization_id, customer_id, sales_order_id, sender_type, sender_display_name, message, created_at, read_at').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
-    client.from('customer_documents').select('id, organization_id, customer_id, sales_order_id, document_type, document_name, document_date, amount, file_path, uploaded_at').order('document_date', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
+    client.from('customer_messages').select('id, organization_id, customer_id, sales_order_id, sender_type, sender_display_name, message, created_at, read_at').eq('organization_id', organizationId).eq('customer_id', customerId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
+    client.from('customer_documents').select('id, organization_id, customer_id, sales_order_id, document_type, document_name, document_date, amount, file_path, uploaded_at').eq('organization_id', organizationId).eq('customer_id', customerId).order('document_date', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
   ])
   const firstError = [organization, customers, salesOrders, lines, workOrders, questions, documents]
     .find((result) => result.error)?.error

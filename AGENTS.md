@@ -100,6 +100,7 @@ Path:
 | High-volume reads, pagination/search, reports, bulk edits, imports/exports, synchronization | `.agents/skills/erp-data-scale/SKILL.md` |
 | Business dates, timestamps, plant timezones, shifts, production dates, recurrence | `.agents/skills/erp-date-time-semantics/SKILL.md` |
 | Roles/permissions, RLS boundaries, tenant/company scope, service-role access | `.agents/skills/erp-access-control/SKILL.md` |
+| Same-tenant foreign keys, tenant-scoped uniqueness, cross-tenant RPC/import/API/privileged-path enforcement | `.agents/skills/erp-tenant-boundaries/SKILL.md` |
 | Critical change history, append-only audit data, retention/archive | `.agents/skills/erp-auditability/SKILL.md` |
 
 ## Development Memory

@@ -11,6 +11,10 @@ Use this skill when changing authentication-adjacent code, permissions, roles, t
 
 Make authorization a consistent data-boundary property rather than a collection of UI checks.
 
+## Contract Ownership
+
+This skill owns authentication-adjacent authorization, membership, roles, permissions, RLS policy behavior, and privileged credential boundaries. Use `erp-tenant-boundaries` when tenant-owned relationships also require composite foreign keys, organization-scoped uniqueness, same-tenant RPC/import/API validation, or structural cross-tenant mismatch tests.
+
 ## Principles
 
 1. **Separate authentication, navigation protection, and authorization.**
