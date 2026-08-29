@@ -36,6 +36,93 @@ h1, h2, h3, p { margin-top: 0; }
 @media (max-width: 760px) { .entity-form { grid-template-columns: 1fr; }.entity-form > label, .entity-form label.full, .entity-form .full { grid-column: 1; }.line-editor, .route-editor { grid-template-columns: 25px 1fr 1fr 34px; }.line-editor .description-field, .route-editor .instruction-field { grid-column: 2 / 4; }.line-editor .check-label { grid-column: 2 / 3; }.form-section > header { align-items: flex-start; gap: 8px; }.modal-backdrop { padding: 8px; }.modal { max-height: calc(100dvh - 16px); } }
 @media print { .sidebar, .mobile-bar, .page-actions, .back-link { display: none !important; }.app-shell { display: block; }.app-main { padding: 0; }.page { padding: 0; }.panel { break-inside: avoid; } }
 
+.auth-create-link {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.auth-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.auth-form select {
+  width: 100%;
+  height: 45px;
+  padding: 0 12px;
+  margin-top: 6px;
+}
+
+.auth-text-button {
+  width: 100%;
+  margin-top: 14px;
+  color: var(--green);
+  border: 0;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.setup-page {
+  min-height: 100vh;
+  padding: 40px 20px;
+  display: grid;
+  place-items: center;
+  background: #101511;
+}
+
+.setup-card {
+  width: min(100%, 620px);
+  padding: 38px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid #89918c;
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, .28);
+}
+
+.setup-card > h1,
+.setup-card > p,
+.setup-card > .setup-icon,
+.setup-card > .setup-complete-icon {
+  text-align: center;
+}
+
+.setup-card > h1 { margin: 18px 0 8px; }
+.setup-card > p { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.setup-card > .button { width: 100%; margin-top: 20px; }
+.setup-icon, .setup-complete-icon { width: 42px; height: 42px; margin: 26px auto 0; color: var(--green); }
+.setup-icon { display: grid; place-items: center; background: var(--green-light); }
+
+.setup-progress {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px 1fr 28px;
+  align-items: center;
+}
+
+.setup-progress span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 10px;
+}
+
+.setup-progress span.active { color: white; background: var(--green); border-color: var(--green); }
+.setup-progress i { height: 1px; background: var(--line); }
+.setup-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 25px; }
+.setup-actions a { min-height: 92px; padding: 14px; display: grid; place-items: center; gap: 8px; color: var(--green); background: #fffefa; border: 1px solid var(--line); text-align: center; font-size: 10px; font-weight: 700; }
+
+@media (max-width: 760px) {
+  .setup-actions { grid-template-columns: 1fr; }
+  .setup-card { padding: 24px; }
+}
+
 /* ShopCore industrial visual system
    The application should read like a shop packet and machine control surface,
    not a generic card-based SaaS dashboard. */
@@ -701,6 +788,163 @@ textarea:focus,
   }
 }
 
+/* User access administration */
+.user-groups {
+  width: fit-content;
+  margin-bottom: 12px;
+}
+
+.user-groups button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.form-notice {
+  padding: 11px 13px;
+  margin: 0 0 13px;
+  color: #245837;
+  background: #e3f1e7;
+  border: 1px solid #bdd9c5;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.user-access-list {
+  overflow: hidden;
+  background: white;
+  border: 1px solid var(--line);
+}
+
+.user-access-row {
+  min-height: 82px;
+  padding: 13px 16px;
+  display: grid;
+  grid-template-columns: 42px minmax(190px, 1fr) minmax(180px, .8fr) auto;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.user-access-row:last-child {
+  border-bottom: 0;
+}
+
+.user-access-avatar {
+  width: 39px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  color: var(--green);
+  background: var(--green-light);
+  border: 1px solid #bdd1ce;
+}
+
+.user-access-identity strong,
+.user-access-identity span,
+.user-access-scope > span {
+  display: block;
+}
+
+.user-access-identity strong {
+  font-size: 12px;
+}
+
+.user-access-identity span {
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.user-access-identity small {
+  display: block;
+  margin-top: 5px;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.user-access-scope > span {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.user-access-row .button-danger {
+  min-height: 36px;
+  padding: 0 11px;
+}
+
+.domain-rule {
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  color: #6a4b1b;
+  background: #fff5df;
+  border: 1px solid #e2cfa7;
+}
+
+.domain-rule svg {
+  flex: 0 0 auto;
+}
+
+.domain-rule strong,
+.domain-rule span {
+  display: block;
+}
+
+.domain-rule strong {
+  font-size: 10px;
+}
+
+.domain-rule span {
+  margin-top: 4px;
+  color: #776746;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .user-access-row {
+    grid-template-columns: 39px minmax(0, 1fr) auto;
+  }
+
+  .user-access-scope {
+    grid-column: 2;
+  }
+
+  .user-access-row .button-danger {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-access-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .user-access-avatar {
+    width: 33px;
+    height: 33px;
+  }
+
+  .user-access-scope {
+    grid-column: 2;
+  }
+
+  .user-access-row .button-danger {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+}
+
 .stat-value,
 .production-quantity strong,
 .production-stats strong,
@@ -925,6 +1169,21 @@ textarea:focus,
 
 .message-bubble {
   border-radius: 2px;
+}
+
+.message-sender {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 9px;
+  letter-spacing: .025em;
+}
+
+.message-bubble.own .message-sender {
+  color: #d8eadc;
+}
+
+.portal-order-toolbar {
+  max-width: 980px;
 }
 
 .route-editor {
@@ -1699,6 +1958,10 @@ textarea:focus,
 
 .report-table {
   min-width: 0;
+}
+
+.dashboard-ready-orders {
+  margin-bottom: 18px;
 }
 
 .report-table-scroll {

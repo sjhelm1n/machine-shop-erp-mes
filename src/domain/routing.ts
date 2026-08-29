@@ -177,10 +177,11 @@ export function salesOrderCompletion(
 }
 
 export function isSalesOrderCompleted(
-  order: Pick<SalesOrder, 'id' | 'shippedAt' | 'invoicedAt'>,
+  order: Pick<SalesOrder, 'id' | 'shippedAt' | 'invoicedAt' | 'customerCompleted'>,
   workOrders: WorkOrder[],
   events: ProductionEvent[],
 ): boolean {
+  if (typeof order.customerCompleted === 'boolean') return order.customerCompleted
   return salesOrderCompletion(order, workOrders, events).completed
 }
 

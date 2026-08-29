@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { salesOrderProgress, workOrderProgress } from '../domain/routing'
 import { daysUntil, formatDate, hourInTimeZone } from '../lib/format'
 import { DashboardVisualizations } from '../components/DashboardVisualizations'
+import { ProductionCompleteOrdersTable } from '../components/ProductionCompleteOrdersTable'
 
 export function DashboardPage() {
   const { data } = useShop()
@@ -33,6 +34,7 @@ export function DashboardPage() {
       <StatCard label="Past due" value={overdue.length} detail={overdue.length ? 'Needs attention' : 'Nothing past due'} tone={overdue.length ? 'danger' : 'success'} href="/app/work-orders" />
       <StatCard label="Unanswered questions" value={unanswered.length} detail={unanswered.length ? 'Customer is waiting' : 'Inbox is clear'} tone={unanswered.length ? 'danger' : 'success'} href="/app/questions" />
     </section>
+    <ProductionCompleteOrdersTable data={data} />
     <div className="dashboard-grid">
       <section className="panel">
         <div className="panel-header"><div><span className="eyebrow">Production</span><h2>Work orders due soon</h2></div><Link to="/app/work-orders">View all <ArrowRight size={16} /></Link></div>

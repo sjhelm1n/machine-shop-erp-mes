@@ -4,7 +4,7 @@ import { appendQuestionReply, archivedConversationOrderIds, plainTextQuestionMes
 import type { Question } from './types'
 
 const customerQuestion: Question = {
-  id: 'question-a', organizationId: 'org-a', customerId: 'customer-a', salesOrderId: 'order-a', senderType: 'customer', message: 'Question', createdAt: '2026-08-28T12:00:00Z', readAt: null,
+  id: 'question-a', organizationId: 'org-a', customerId: 'customer-a', salesOrderId: 'order-a', senderType: 'customer', senderName: 'Morgan Lee', message: 'Question', createdAt: '2026-08-28T12:00:00Z', readAt: null,
 }
 
 describe('appendQuestionReply', () => {

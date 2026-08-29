@@ -4,9 +4,9 @@ insert into public.organizations(id, name) values
   ('10000000-0000-0000-0000-000000000001', 'Northline Machine Co.')
 on conflict (id) do nothing;
 
-insert into public.customers(id, organization_id, customer_name, primary_address, default_ship_to_address, default_bill_to_address) values
-  ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Acme Motion Systems', E'4800 Industrial Pkwy\nDetroit, MI 48211', E'4800 Industrial Pkwy\nDetroit, MI 48211', E'PO Box 922\nDetroit, MI 48231'),
-  ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'Northstar Robotics', E'1190 Innovation Dr\nAnn Arbor, MI 48108', E'1190 Innovation Dr\nAnn Arbor, MI 48108', E'1190 Innovation Dr\nAnn Arbor, MI 48108')
+insert into public.customers(id, organization_id, customer_name, portal_email_domain, primary_address, default_ship_to_address, default_bill_to_address) values
+  ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Acme Motion Systems', 'acmemotion.com', E'4800 Industrial Pkwy\nDetroit, MI 48211', E'4800 Industrial Pkwy\nDetroit, MI 48211', E'PO Box 922\nDetroit, MI 48231'),
+  ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'Northstar Robotics', 'northstarrobotics.com', E'1190 Innovation Dr\nAnn Arbor, MI 48108', E'1190 Innovation Dr\nAnn Arbor, MI 48108', E'1190 Innovation Dr\nAnn Arbor, MI 48108')
 on conflict (id) do nothing;
 
 insert into public.sales_orders(id, organization_id, sales_order_number, sales_order_name, customer_id, customer_name, customer_address, customer_po_number, ship_to_address, bill_to_address, date_received, order_due_date, notes) values

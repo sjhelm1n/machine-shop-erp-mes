@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { demoData } from '../data/demoData'
-import { customerPortalSnapshot } from './customerPortal'
+import { customerPortalSnapshot, filterCustomerPortalOrders } from './customerPortal'
 
 describe('customerPortalSnapshot', () => {
   it('includes only records belonging to the selected customer', () => {
@@ -27,5 +27,35 @@ describe('customerPortalSnapshot', () => {
     expect(snapshot.productionEvents).toEqual([])
     expect(snapshot.questions).toEqual([])
     expect(snapshot.documents).toEqual([])
+  })
+
+  it('filters customer orders by authoritative completion status', () => {
+    const customer = demoData.customers.find((candidate) => candidate.customerName === 'Acme Motion Systems')!
+    const snapshot = customerPortalSnapshot(demoData, customer.id)
+
+    expect(filterCustomerPortalOrders(snapshot, 'complete', '').map((order) => order.id)).toEqual(['so-1039'])
+    expect(filterCustomerPortalOrders(snapshot, 'in_progress', '').map((order) => order.id)).toEqual(['so-1048'])
+  })
+
+  it('preserves the database completion decision when archived work orders are hidden', () => {
+    const customer = demoData.customers.find((candidate) => candidate.customerName === 'Acme Motion Systems')!
+    const completedOrder = demoData.salesOrders.find((order) => order.id === 'so-1039')!
+    const snapshot = customerPortalSnapshot({
+      ...demoData,
+      salesOrders: [{ ...completedOrder, customerCompleted: true }],
+      workOrders: [],
+      productionEvents: [],
+    }, customer.id)
+
+    expect(filterCustomerPortalOrders(snapshot, 'complete', '').map((order) => order.id)).toEqual(['so-1039'])
+  })
+
+  it('searches customer orders by PO, part number, and description', () => {
+    const customer = demoData.customers.find((candidate) => candidate.customerName === 'Acme Motion Systems')!
+    const snapshot = customerPortalSnapshot(demoData, customer.id)
+
+    expect(filterCustomerPortalOrders(snapshot, 'all', 'PO-77314').map((order) => order.id)).toEqual(['so-1048'])
+    expect(filterCustomerPortalOrders(snapshot, 'all', 'ACM-3188').map((order) => order.id)).toEqual(['so-1039'])
+    expect(filterCustomerPortalOrders(snapshot, 'all', 'drive housing').map((order) => order.id)).toEqual(['so-1048'])
   })
 })

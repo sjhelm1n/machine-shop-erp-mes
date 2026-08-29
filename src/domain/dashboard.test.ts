@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { demoData } from '../data/demoData'
-import { buildDemoDashboardMetrics, parseDashboardMetrics } from './dashboard'
+import { buildDemoDashboardMetrics, buildDemoProductionCompleteOpenOrders, parseDashboardMetrics, parseProductionCompleteOpenOrders } from './dashboard'
 
 describe('dashboard metrics', () => {
   it('uses date-aware domain rules for revenue, delivery, scrap, idle work, and lead time', () => {
@@ -36,5 +36,36 @@ describe('dashboard metrics', () => {
       { date: '2026-08-22', quantity: 1 },
       { date: '2026-08-23', quantity: 2 },
     ])
+  })
+
+  it('lists open sales orders only when every active work order is complete', () => {
+    const data = structuredClone(demoData)
+    const order = data.salesOrders.find((candidate) => candidate.id === 'so-1048')!
+    const workOrder = data.workOrders.find((candidate) => candidate.salesOrderId === order.id)!
+    workOrder.completionDate = '2026-08-27'
+
+    expect(buildDemoProductionCompleteOpenOrders(data)).toEqual([{
+      salesOrderId: order.id,
+      salesOrderName: order.salesOrderName,
+      customerName: order.customerName,
+      customerPoNumber: order.customerPoNumber,
+      orderDueDate: order.orderDueDate,
+      productionCompletedAt: '2026-08-27',
+      shippedAt: null,
+      invoicedAt: null,
+    }])
+  })
+
+  it('parses production-complete sales orders at the database boundary', () => {
+    expect(parseProductionCompleteOpenOrders([{
+      sales_order_id: 'order-1',
+      sales_order_name: '1048',
+      customer_name: 'Acme',
+      customer_po_number: 'PO-1',
+      order_due_date: '2026-08-28',
+      production_completed_at: '2026-08-27',
+      shipped_at: null,
+      invoiced_at: '2026-08-28T12:00:00Z',
+    }])).toMatchObject([{ salesOrderId: 'order-1', shippedAt: null }])
   })
 })

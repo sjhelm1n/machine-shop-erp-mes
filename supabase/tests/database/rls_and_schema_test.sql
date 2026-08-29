@@ -12,7 +12,19 @@ select has_table('public', 'routing_templates', 'routing templates exist');
 select has_table('public', 'routing_template_steps', 'routing template steps exist');
 select has_table('public', 'customer_messages', 'customer_messages exists');
 select has_table('public', 'customer_documents', 'customer documents exist');
+select has_table('public', 'user_invitations', 'user invitation audit records exist');
+select has_column('public', 'customers', 'portal_email_domain', 'customers own a portal email-domain boundary');
+select has_column('public', 'profiles', 'email', 'profiles expose the normalized login email to authorized user managers');
+select has_column('public', 'profiles', 'activated_at', 'profiles record invitation activation');
+select has_column('public', 'profiles', 'is_super_admin', 'profiles identify the protected plant super admin');
+select has_column('public', 'profiles', 'position', 'customer representative profiles include a position');
+select has_column('public', 'user_invitations', 'position', 'customer representative invitations preserve position');
+select has_column('public', 'customer_messages', 'sender_display_name', 'messages preserve the sender name');
 select has_column('public', 'organizations', 'plant_timezone', 'organizations own an explicit plant timezone');
+select has_column('public', 'organizations', 'account_email_domain', 'organizations reserve the verified owner email domain');
+select has_column('public', 'organizations', 'account_claim_name', 'organizations have a normalized company-name tenant claim');
+select has_column('public', 'organizations', 'onboarding_completed_at', 'organizations record completion of first-run setup');
+select has_trigger('public', 'organizations', 'organizations_preserve_account_claim_name', 'tenant company claims are assigned and kept immutable');
 select hasnt_table('public', 'invoices', 'legacy invoices table was generalized');
 select has_column('public', 'customer_documents', 'document_type', 'customer documents have a type');
 select has_column('public', 'customer_documents', 'document_name', 'customer documents have a name or number');
@@ -100,14 +112,22 @@ select ok(not has_table_privilege('authenticated', 'public.audit_log', 'INSERT')
 select ok(not has_table_privilege('authenticated', 'public.audit_log', 'UPDATE'), 'authenticated users cannot rewrite audit history');
 select ok(not has_table_privilege('authenticated', 'public.audit_log', 'DELETE'), 'authenticated users cannot delete audit history');
 select ok(not has_table_privilege('authenticated', 'public.production_events', 'INSERT'), 'production events can only be posted through trusted RPCs');
+select ok(not has_table_privilege('authenticated', 'public.user_invitations', 'SELECT'), 'invitation records are not directly exposed');
+select ok(not has_table_privilege('authenticated', 'public.user_invitations', 'INSERT'), 'invitation records can only be created through the trusted RPC');
 select ok(not has_table_privilege('authenticated', 'public.sales_orders', 'INSERT'), 'sales orders can only be created atomically through the RPC');
 select ok(not has_table_privilege('authenticated', 'public.work_orders', 'INSERT'), 'work orders can only be created atomically through the RPC');
 select ok(not has_table_privilege('authenticated', 'public.routing_steps', 'INSERT'), 'routing steps can only be created with their work order');
 select ok(not has_table_privilege('authenticated', 'public.routing_templates', 'INSERT'), 'routing templates can only be saved atomically through the RPC');
 select ok(not has_table_privilege('authenticated', 'public.routing_template_steps', 'INSERT'), 'routing template steps can only be saved with their template');
+select ok(has_column_privilege('authenticated', 'public.customers', 'portal_email_domain', 'INSERT'), 'authenticated manufacturers can set a customer portal domain during creation');
+select ok(has_column_privilege('authenticated', 'public.customers', 'portal_email_domain', 'UPDATE'), 'authenticated manufacturers can edit a customer portal domain');
 select has_function('public', 'customer_portal_sales_orders', array[]::text[], 'customer sales-order portal RPC exists');
 select has_function('public', 'customer_portal_sales_order_lines', array[]::text[], 'customer line-item portal RPC exists');
 select has_function('public', 'customer_portal_work_orders', array[]::text[], 'customer work-order portal RPC exists');
+select has_function('public', 'create_user_invitation', array['text', 'text', 'public.profile_role', 'uuid'], 'user invitation RPC exists');
+select has_function('public', 'create_user_invitation', array['text', 'text', 'public.profile_role', 'uuid', 'text'], 'position-aware user invitation RPC exists');
+select has_function('public', 'complete_user_invitation', array['uuid', 'uuid'], 'user invitation completion RPC exists');
+select has_function('public', 'remove_user_access', array['uuid'], 'user revocation RPC exists');
 select has_function('public', 'add_sales_order_line', array['uuid', 'jsonb'], 'sales-order line append RPC exists');
 select has_function('public', 'set_sales_order_archived', array['uuid', 'boolean'], 'sales-order archive RPC exists');
 select has_function('public', 'set_work_order_archived', array['uuid', 'boolean'], 'work-order archive RPC exists');
@@ -118,11 +138,21 @@ select has_function('public', 'record_production_event_v2', array['uuid', 'uuid'
 select has_function('public', 'production_step_snapshot', array['uuid', 'uuid'], 'narrow production snapshot RPC exists');
 select has_function('public', 'work_order_step_metrics', array['uuid[]'], 'bounded set-wise work-order metrics RPC exists');
 select has_function('public', 'dashboard_metrics', array['date', 'date', 'text'], 'tenant-scoped dashboard reporting RPC exists');
+select has_function('public', 'dashboard_production_complete_open_orders', array[]::text[], 'production-complete open sales-order dashboard RPC exists');
+select has_function('public', 'claim_shop_account', array['text', 'text', 'text'], 'self-service shop claim RPC exists');
+select has_function('public', 'complete_my_organization_onboarding', array['text', 'text'], 'first-run completion RPC exists');
+select ok(not has_function_privilege('anon', 'public.claim_shop_account(text,text,text)', 'EXECUTE'), 'anonymous users cannot claim a shop organization');
+select ok(has_function_privilege('authenticated', 'public.claim_shop_account(text,text,text)', 'EXECUTE'), 'authenticated users can request a verified shop claim');
 select ok(
   not (select prosecdef from pg_proc where oid = 'public.dashboard_metrics(date,date,text)'::regprocedure),
   'dashboard reporting retains caller RLS'
 );
 select ok(not has_function_privilege('anon', 'public.dashboard_metrics(date,date,text)', 'EXECUTE'), 'anonymous users cannot execute dashboard reporting');
+select ok(
+  not (select prosecdef from pg_proc where oid = 'public.dashboard_production_complete_open_orders()'::regprocedure),
+  'production-complete sales-order reporting retains caller RLS'
+);
+select ok(not has_function_privilege('anon', 'public.dashboard_production_complete_open_orders()', 'EXECUTE'), 'anonymous users cannot execute production-complete sales-order reporting');
 select has_function('public', 'mark_sales_order_milestone', array['uuid', 'text'], 'trusted fulfillment milestone RPC exists');
 select has_function('public', 'save_routing_template', array['uuid', 'uuid', 'text', 'jsonb'], 'atomic routing-template save RPC exists');
 select has_function('public', 'set_routing_template_archived', array['uuid', 'boolean'], 'routing-template archive RPC exists');
@@ -154,18 +184,37 @@ select matches((select qual::text from pg_policies where schemaname = 'public' a
 -- functions must still isolate the authenticated customer at execution time.
 set local session_replication_role = replica;
 insert into auth.users(id) values
+  ('30000000-0000-0000-0000-000000000095'),
+  ('30000000-0000-0000-0000-000000000096'),
+  ('30000000-0000-0000-0000-000000000097'),
   ('30000000-0000-0000-0000-000000000091'),
+  ('30000000-0000-0000-0000-000000000092'),
+  ('30000000-0000-0000-0000-000000000093'),
   ('30000000-0000-0000-0000-000000000099'),
   ('30000000-0000-0000-0000-000000000098');
-insert into public.organizations(id, name) values ('10000000-0000-0000-0000-000000000099', 'RLS test shop');
-insert into public.organizations(id, name) values ('10000000-0000-0000-0000-000000000098', 'Other RLS test shop');
-insert into public.customers(id, organization_id, customer_name) values
-  ('20000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', 'Customer A'),
-  ('20000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', 'Customer B');
-insert into public.profiles(id, organization_id, customer_id, display_name, role) values
-  ('30000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', 'Portal A', 'customer'),
-  ('30000000-0000-0000-0000-000000000099', '10000000-0000-0000-0000-000000000099', null, 'Shop User', 'manufacturer'),
-  ('30000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', null, 'Other Shop User', 'manufacturer');
+update auth.users set email = case id
+  when '30000000-0000-0000-0000-000000000095' then 'second@newshop.test'
+  when '30000000-0000-0000-0000-000000000096' then 'first@newshop.test'
+  when '30000000-0000-0000-0000-000000000097' then 'staff@rlstest.com'
+  when '30000000-0000-0000-0000-000000000091' then 'portal-a@customera.com'
+  when '30000000-0000-0000-0000-000000000092' then 'coworker@customera.com'
+  when '30000000-0000-0000-0000-000000000093' then 'portal-b@customerb.com'
+  when '30000000-0000-0000-0000-000000000099' then 'shop@rlstest.com'
+  when '30000000-0000-0000-0000-000000000098' then 'other-shop@rlstest.com'
+end;
+insert into public.organizations(id, name, account_claim_name) values ('10000000-0000-0000-0000-000000000099', 'RLS test shop', 'rls test shop');
+insert into public.organizations(id, name, account_claim_name) values ('10000000-0000-0000-0000-000000000098', 'Other RLS test shop', 'other rls test shop');
+insert into public.organizations(id, name, account_claim_name) values ('10000000-0000-0000-0000-000000000096', 'New super-admin test shop', 'new super-admin test shop');
+insert into public.customers(id, organization_id, customer_name, portal_email_domain) values
+  ('20000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', 'Customer A', 'customera.com'),
+  ('20000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', 'Customer B', 'customerb.com');
+insert into public.profiles(id, organization_id, customer_id, email, display_name, role, is_super_admin, activated_at) values
+  ('30000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', 'portal-a@customera.com', 'Portal A', 'customer', false, now()),
+  ('30000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', 'coworker@customera.com', 'Portal A Coworker', 'customer', false, now()),
+  ('30000000-0000-0000-0000-000000000093', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000092', 'portal-b@customerb.com', 'Portal B', 'customer', false, now()),
+  ('30000000-0000-0000-0000-000000000099', '10000000-0000-0000-0000-000000000099', null, 'shop@rlstest.com', 'Shop User', 'manufacturer', true, now()),
+  ('30000000-0000-0000-0000-000000000097', '10000000-0000-0000-0000-000000000099', null, 'staff@rlstest.com', 'Shop Staff', 'manufacturer', false, now()),
+  ('30000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', null, 'other-shop@rlstest.com', 'Other Shop User', 'manufacturer', true, now());
 insert into public.sales_orders(id, organization_id, sales_order_number, sales_order_name, customer_id, customer_name, customer_po_number, date_received, order_due_date) values
   ('40000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', 'SO-A', 'SO-A', '20000000-0000-0000-0000-000000000091', 'Customer A', 'PO-A', current_date, current_date + 7),
   ('40000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', 'SO-B', 'SO-B', '20000000-0000-0000-0000-000000000092', 'Customer B', 'PO-B', current_date, current_date + 7);
@@ -183,15 +232,64 @@ insert into public.customer_stage_mappings(routing_step_id, work_order_id, seque
   ('70000000-0000-4000-a000-000000000092', '60000000-0000-0000-0000-000000000092', 10, 'In production');
 insert into public.production_events(id, organization_id, work_order_id, routing_step_id, event_type, quantity, to_routing_step_id) values
   ('80000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '60000000-0000-0000-0000-000000000091', '70000000-0000-4000-a000-000000000091', 'release', 10, '70000000-0000-4000-a000-000000000091');
-insert into public.customer_messages(id, organization_id, customer_id, sales_order_id, sender_type, message) values
-  ('90000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', '40000000-0000-0000-0000-000000000091', 'customer', 'Question A'),
-  ('90000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000092', '40000000-0000-0000-0000-000000000092', 'customer', 'Question B');
+insert into public.customer_messages(id, organization_id, customer_id, sales_order_id, sender_type, sender_display_name, message) values
+  ('90000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', '40000000-0000-0000-0000-000000000091', 'customer', 'Portal A', 'Question A'),
+  ('90000000-0000-0000-0000-000000000092', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000092', '40000000-0000-0000-0000-000000000092', 'customer', 'Portal B', 'Question B');
 insert into public.audit_log(id, organization_id, entity_type, entity_id, record_id, operation, diff, source) values
   ('a0000000-0000-0000-0000-000000000098', '10000000-0000-0000-0000-000000000098', 'customers', '20000000-0000-0000-0000-000000000098', '20000000-0000-0000-0000-000000000098', 'UPDATE', '{}', 'test-fixture');
 set local session_replication_role = origin;
 
+insert into public.profiles(id, organization_id, customer_id, email, display_name, role, activated_at) values
+  ('30000000-0000-0000-0000-000000000096', '10000000-0000-0000-0000-000000000096', null, 'first@newshop.test', 'First Plant Account', 'manufacturer', now());
+insert into public.profiles(id, organization_id, customer_id, email, display_name, role, activated_at) values
+  ('30000000-0000-0000-0000-000000000095', '10000000-0000-0000-0000-000000000096', null, 'second@newshop.test', 'Second Plant Account', 'manufacturer', now());
+select ok((select is_super_admin from public.profiles where id = '30000000-0000-0000-0000-000000000096'), 'first plant account is automatically assigned super admin');
+select ok(not (select is_super_admin from public.profiles where id = '30000000-0000-0000-0000-000000000095'), 'later plant accounts are not assigned super admin');
+select throws_ok(
+  $$delete from public.profiles where id = '30000000-0000-0000-0000-000000000096'$$,
+  '42501',
+  'The plant super admin cannot be removed',
+  'the database blocks direct deletion of a super admin'
+);
+select throws_ok(
+  $$delete from auth.users where id = '30000000-0000-0000-0000-000000000096'$$,
+  '42501',
+  'The plant super admin cannot be removed',
+  'an Auth deletion cannot cascade-remove the super admin profile'
+);
+select throws_ok(
+  $$update public.profiles set is_super_admin = false where id = '30000000-0000-0000-0000-000000000096'$$,
+  '42501',
+  'The plant super admin assignment cannot be changed',
+  'the database keeps the super-admin assignment immutable'
+);
+
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000091","role":"authenticated"}';
+select is((select count(*)::integer from public.profiles), 2, 'customer user can list personnel only for its own customer account');
+select is(
+  public.create_user_invitation('new.person@customera.com', 'New Person', 'customer', '20000000-0000-0000-0000-000000000091', 'Purchasing Manager')->>'position',
+  'Purchasing Manager',
+  'customer user can prepare a position-attributed invitation for its own company domain'
+);
+select throws_ok(
+  $$select public.create_user_invitation('no.position@customera.com', 'No Position', 'customer', '20000000-0000-0000-0000-000000000091', null)$$,
+  'P0001',
+  'Enter the customer representative''s position',
+  'new customer representative invitations require a position'
+);
+select throws_ok(
+  $$select public.create_user_invitation('intruder@customerb.com', 'Wrong Domain', 'customer', '20000000-0000-0000-0000-000000000092', 'Buyer')$$,
+  'P0001',
+  'Email must use the @customera.com company domain',
+  'customer user cannot invite another customer or email domain'
+);
+select throws_ok(
+  $$select public.create_user_invitation('staff@customera.com', 'Not Staff', 'manufacturer', null)$$,
+  '42501',
+  'Customer users may only invite customer personnel',
+  'customer user cannot grant manufacturer access'
+);
 select is((select count(*)::integer from public.sales_orders), 0, 'customer cannot query raw sales orders');
 select is((select count(*)::integer from public.production_events), 0, 'customer cannot query raw production events');
 select is((select count(*)::integer from public.work_order_step_metrics(array['60000000-0000-0000-0000-000000000091'::uuid])), 0, 'customer cannot derive internal work-order metrics');
@@ -203,6 +301,7 @@ select throws_ok(
   'Manufacturer access required',
   'customer cannot read manufacturer dashboard reporting'
 );
+select is((select count(*)::integer from public.dashboard_production_complete_open_orders()), 0, 'customer cannot read production-complete sales-order reporting');
 select throws_ok(
   $$select public.save_routing_template('b0000000-0000-0000-0000-000000000091', '10000000-0000-0000-0000-000000000099', 'Denied route', '[{"routing_step_name":"Saw","customer_stage_name":"In production"}]'::jsonb)$$,
   'P0001',
@@ -241,7 +340,26 @@ select is((select count(*)::integer from public.customer_portal_sales_order_line
 select is((select count(*)::integer from public.customer_portal_work_orders()), 1, 'customer portal returns only its own aggregate work order');
 select is((select count(*)::integer from public.customer_messages), 1, 'customer messages are isolated by customer account');
 
+set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000097","role":"authenticated"}';
+select throws_ok(
+  $$select public.remove_user_access('30000000-0000-0000-0000-000000000099')$$,
+  '42501',
+  'The plant super admin cannot be removed',
+  'another plant account cannot remove the super admin through the access RPC'
+);
+
 set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000099","role":"authenticated"}';
+select is((select count(*)::integer from public.profiles), 5, 'manufacturer lists users only in its organization');
+select lives_ok(
+  $$select public.create_user_invitation('new.staff@rlstest.com', 'New Staff', 'manufacturer', null)$$,
+  'manufacturer can prepare a plant-staff invitation'
+);
+select throws_ok(
+  $$select public.create_user_invitation('wrong@customera.net', 'Wrong Customer Domain', 'customer', '20000000-0000-0000-0000-000000000091', 'Buyer')$$,
+  'P0001',
+  'Email must use the @customera.com company domain',
+  'manufacturer customer invitation still enforces the configured company domain'
+);
 select is((select count(*)::integer from public.sales_orders), 2, 'manufacturer can query organization sales orders');
 select is(
   jsonb_array_length(public.dashboard_metrics(null, null, 'month')->'revenueByCustomer'),
@@ -253,6 +371,20 @@ select is(
   1990.00::numeric,
   'dashboard sales revenue uses authoritative line totals'
 );
+reset role;
+set local session_replication_role = replica;
+update public.work_orders set completion_date = current_date where id = '60000000-0000-0000-0000-000000000092';
+set local session_replication_role = origin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000099","role":"authenticated"}';
+select is((select count(*)::integer from public.dashboard_production_complete_open_orders()), 1, 'manufacturer sees only production-complete open sales orders in its organization');
+select is((select sales_order_id from public.dashboard_production_complete_open_orders()), '40000000-0000-0000-0000-000000000092'::uuid, 'production-complete dashboard result identifies the ready sales order');
+reset role;
+set local session_replication_role = replica;
+update public.work_orders set completion_date = null where id = '60000000-0000-0000-0000-000000000092';
+set local session_replication_role = origin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000099","role":"authenticated"}';
 select throws_ok(
   $$insert into public.customer_messages(organization_id, customer_id, sales_order_id, sender_type, message) values ('10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', '40000000-0000-0000-0000-000000000091', 'manufacturer', 'Open javascript:alert(1)')$$,
   '23514',
@@ -445,6 +577,7 @@ select is((select count(*)::integer from public.production_events), 2, 'manufact
 insert into public.customer_messages(id, organization_id, customer_id, sales_order_id, sender_type, message) values
   ('90000000-0000-0000-0000-000000000093', '10000000-0000-0000-0000-000000000099', '20000000-0000-0000-0000-000000000091', '40000000-0000-0000-0000-000000000091', 'manufacturer', 'Response A');
 select is((select created_by from public.customer_messages where id = '90000000-0000-0000-0000-000000000093'), '30000000-0000-0000-0000-000000000099'::uuid, 'message provenance is assigned by Postgres');
+select is((select sender_display_name from public.customer_messages where id = '90000000-0000-0000-0000-000000000093'), 'Shop User', 'message sender name is captured from the authenticated profile');
 select ok((select read_at is not null from public.customer_messages where id = '90000000-0000-0000-0000-000000000091'), 'manufacturer reply clears the incoming-message notification');
 select ok((select read_at is null from public.customer_messages where id = '90000000-0000-0000-0000-000000000092'), 'reply does not clear another order thread');
 select is((select count(*)::integer from public.audit_log where organization_id = '10000000-0000-0000-0000-000000000098'), 0, 'manufacturer cannot read another organization audit history');
@@ -458,6 +591,96 @@ select ok(
       and source = 'record_production_event_v2'
   ),
   'production audit history preserves request, actor, operation, and source'
+);
+reset role;
+
+-- Self-service organization creation is a single, verified and company-scoped
+-- transaction. These identities deliberately have no pre-existing profiles.
+set local session_replication_role = replica;
+insert into auth.users(id, email, email_confirmed_at) values
+  ('30000000-0000-0000-0000-000000000081', 'owner@claim-test.example', now()),
+  ('30000000-0000-0000-0000-000000000082', 'coworker@claim-test.example', now()),
+  ('30000000-0000-0000-0000-000000000083', 'person@gmail.com', now()),
+  ('30000000-0000-0000-0000-000000000084', 'unverified@another-shop.example', null),
+  ('30000000-0000-0000-0000-000000000085', 'owner@different-domain.example', now());
+set local session_replication_role = origin;
+
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000081","role":"authenticated"}';
+select lives_ok(
+  $$select public.claim_shop_account('Owner Name', 'Claim Test Machine', 'America/Detroit')$$,
+  'a verified business-email user can atomically claim a new organization'
+);
+select is(
+  (select account_email_domain from public.organizations where id = (select organization_id from public.profiles where id = '30000000-0000-0000-0000-000000000081')),
+  'claim-test.example',
+  'the database derives and stores the normalized company domain'
+);
+select is(
+  (select account_claim_name from public.organizations where id = (select organization_id from public.profiles where id = '30000000-0000-0000-0000-000000000081')),
+  'claim test machine',
+  'the submitted company name is normalized into the tenant claim'
+);
+select ok(
+  (select role = 'manufacturer' and is_super_admin and activated_at is not null from public.profiles where id = '30000000-0000-0000-0000-000000000081'),
+  'the claimed identity becomes the active protected manufacturer super admin'
+);
+select ok(
+  (select onboarding_completed_at is null from public.organizations where id = (select organization_id from public.profiles where id = '30000000-0000-0000-0000-000000000081')),
+  'new organizations remain gated until first-run setup is complete'
+);
+select throws_ok(
+  $$select public.claim_shop_account('Owner Again', 'Duplicate Claim', 'America/Detroit')$$,
+  'P0001',
+  'This account is already connected to a ShopCore organization',
+  'the same identity cannot claim more than one organization'
+);
+select lives_ok(
+  $$select public.complete_my_organization_onboarding('Claim Test Machine LLC', 'America/Chicago')$$,
+  'the protected owner can complete first-run setup'
+);
+select ok(
+  (select onboarding_completed_at is not null and name = 'Claim Test Machine LLC' and plant_timezone = 'America/Chicago' from public.organizations where id = (select organization_id from public.profiles where id = '30000000-0000-0000-0000-000000000081')),
+  'onboarding completion stores the confirmed shop settings'
+);
+select ok(
+  exists (select 1 from public.audit_log where actor_id = '30000000-0000-0000-0000-000000000081' and operation = 'ONBOARDING_COMPLETED' and source = 'complete_organization_onboarding'),
+  'first-run completion is attributed in append-only audit history'
+);
+
+set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000082","role":"authenticated"}';
+select lives_ok(
+  $$select public.claim_shop_account('Second Owner', 'Second Claim', 'America/Detroit')$$,
+  'the same email domain can create a differently named company tenant'
+);
+select is(
+  (select account_claim_name from public.organizations where id = (select organization_id from public.profiles where id = '30000000-0000-0000-0000-000000000082')),
+  'second claim',
+  'email domains do not own tenant claims'
+);
+set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000085","role":"authenticated"}';
+select throws_ok(
+  $$select public.claim_shop_account('Duplicate Company', '  CLAIM   TEST MACHINE  ', 'America/Detroit')$$,
+  'P0001',
+  'A ShopCore tenant already exists for company name "CLAIM TEST MACHINE". Ask its administrator to invite you.',
+  'capitalization and repeated whitespace cannot create a duplicate company tenant'
+);
+set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000083","role":"authenticated"}';
+select lives_ok(
+  $$select public.claim_shop_account('Personal User', 'Personal Shop', 'America/Detroit')$$,
+  'a verified personal email can claim an organization'
+);
+select is(
+  (select account_claim_name from public.organizations where id = (select organization_id from public.profiles where id = '30000000-0000-0000-0000-000000000083')),
+  'personal shop',
+  'personal-provider emails claim tenants by company name'
+);
+set local request.jwt.claims = '{"sub":"30000000-0000-0000-0000-000000000084","role":"authenticated"}';
+select throws_ok(
+  $$select public.claim_shop_account('Unverified User', 'Unverified Shop', 'America/Detroit')$$,
+  '42501',
+  'Verify your email before creating the shop account',
+  'an unverified Auth identity cannot claim an organization'
 );
 reset role;
 

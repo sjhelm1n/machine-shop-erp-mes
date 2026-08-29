@@ -5,6 +5,7 @@ import type { ProductionEvent, Question, ShopData } from '../domain/types'
 import { calculateStepMetrics } from '../domain/routing'
 import { nextChronologicalNumber } from '../domain/orderNumbers'
 import { appendQuestionReply, plainTextQuestionMessage, salesOrderConversationLifecycle } from '../domain/questions'
+import { normalizeEmailDomain } from '../domain/userManagement'
 import { env } from '../lib/env'
 import { calendarDateInTimeZone } from '../lib/format'
 import { addSalesOrderLine as addSalesOrderLineRecord, createCustomer, createSalesOrder, createWorkOrder, loadShopData, markSalesOrderMilestone, recordProductionAdjustment, recordProductionEvent, reverseProductionEvent, saveRoutingTemplate as saveRoutingTemplateRecord, sendQuestion, setRoutingTemplateArchived as setRoutingTemplateArchivedRecord, setSalesOrderArchived as setSalesOrderArchivedRecord, setSalesOrderLineArchived as setSalesOrderLineArchivedRecord, setWorkOrderArchived as setWorkOrderArchivedRecord, updateCustomer, updateSalesOrderLine, updateWorkOrder as updateWorkOrderRecord, type CustomerInput, type RoutingTemplateInput, type SalesOrderInput, type SalesOrderLineInput, type WorkOrderInput, type WorkOrderUpdateInput } from '../services/shopService'
@@ -180,22 +181,24 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       throw new Error('This conversation was archived seven days after the sales order closed.')
     }
     const message = plainTextQuestionMessage(input.message)
-    const next: Question = { id: crypto.randomUUID(), organizationId: profile.organizationId, customerId: input.customerId, salesOrderId: input.salesOrderId, senderType: profile.role, message, createdAt: new Date().toISOString(), readAt: null }
+    const next: Question = { id: crypto.randomUUID(), organizationId: profile.organizationId, customerId: input.customerId, salesOrderId: input.salesOrderId, senderType: profile.role, senderName: profile.displayName, message, createdAt: new Date().toISOString(), readAt: null }
     if (env.demoMode) setData((current) => current ? { ...current, questions: appendQuestionReply(current.questions, next) } : current)
     else { await sendQuestion(next); await refresh() }
     setNotice('Message sent')
   }
 
   const addCustomer: ShopValue['addCustomer'] = async (input) => {
+    const emailDomain = normalizeEmailDomain(input.emailDomain) || null
     if (env.demoMode) {
-      setData((current) => current ? { ...current, customers: [...current.customers, { id: crypto.randomUUID(), organizationId: input.organizationId, customerName: input.customerName, logoUrl: input.logoUrl.trim() || null, primaryAddress: input.primaryAddress, defaultShipToAddress: input.shipToAddress, defaultBillToAddress: input.billToAddress }] } : current)
+      setData((current) => current ? { ...current, customers: [...current.customers, { id: crypto.randomUUID(), organizationId: input.organizationId, customerName: input.customerName, logoUrl: input.logoUrl.trim() || null, emailDomain, primaryAddress: input.primaryAddress, defaultShipToAddress: input.shipToAddress, defaultBillToAddress: input.billToAddress }] } : current)
     } else { await createCustomer(input); await refresh() }
     setNotice('Customer created')
   }
 
   const editCustomer: ShopValue['editCustomer'] = async (customerId, input) => {
+    const emailDomain = normalizeEmailDomain(input.emailDomain) || null
     if (env.demoMode) {
-      setData((current) => current ? { ...current, customers: current.customers.map((customer) => customer.id === customerId ? { ...customer, customerName: input.customerName, logoUrl: input.logoUrl.trim() || null, primaryAddress: input.primaryAddress, defaultShipToAddress: input.shipToAddress, defaultBillToAddress: input.billToAddress } : customer) } : current)
+      setData((current) => current ? { ...current, customers: current.customers.map((customer) => customer.id === customerId ? { ...customer, customerName: input.customerName, logoUrl: input.logoUrl.trim() || null, emailDomain, primaryAddress: input.primaryAddress, defaultShipToAddress: input.shipToAddress, defaultBillToAddress: input.billToAddress } : customer) } : current)
     } else { await updateCustomer(customerId, input); await refresh() }
     setNotice('Customer updated')
   }

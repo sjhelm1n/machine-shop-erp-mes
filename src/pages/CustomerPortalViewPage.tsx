@@ -49,7 +49,7 @@ function QuestionsPreview({ snapshot, plantTimezone }: { snapshot: CustomerPorta
       })}</aside>
       <div className="conversation"><header><div><strong>{selectedOrder?.salesOrderName ?? 'General question'}</strong><span>{selectedOrder ? `${selectedOrder.salesOrderName} · PO ${selectedOrder.customerPoNumber}` : 'General question'}</span></div></header><div className="message-stream">{selectedMessages.map((question) => {
         const own = question.senderType === 'customer'
-        return <div className={`message-bubble ${own ? 'own' : ''}`} key={question.id}><span>{question.message}</span><small>{formatDateTime(question.createdAt, plantTimezone)} {own && <CheckCheck size={13} />}</small></div>
+        return <div className={`message-bubble ${own ? 'own' : ''}`} key={question.id}><strong className="message-sender">{question.senderName}</strong><span>{question.message}</span><small>{formatDateTime(question.createdAt, plantTimezone)} {own && <CheckCheck size={13} />}</small></div>
       })}</div>{conversationFilter === 'archived' ? <div className="report-empty">Archived conversations are read-only.</div> : <div className="message-compose portal-preview-compose"><textarea aria-label="Message preview" rows={2} placeholder="Plain text only—no links or attachments…" disabled /><Button aria-label="Send message preview" disabled><Send size={18} /></Button></div>}</div>
     </section>}
   </>

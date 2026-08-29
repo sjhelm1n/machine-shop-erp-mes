@@ -15,6 +15,17 @@ export interface DashboardMetrics {
   leadTimes: Array<{ workOrderId: string; workOrderName: string; partNumber: string; customerName: string; enteredDate: string; completionDate: string; leadTimeDays: number }>
 }
 
+export interface ProductionCompleteOpenOrder {
+  salesOrderId: string
+  salesOrderName: string
+  customerName: string
+  customerPoNumber: string
+  orderDueDate: string
+  productionCompletedAt: string
+  shippedAt: string | null
+  invoicedAt: string | null
+}
+
 function record(value: unknown, name: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${name} returned an invalid record.`)
   return value as Record<string, unknown>
@@ -33,6 +44,45 @@ function string(value: unknown, field: string): string {
 function number(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Dashboard field ${field} must be a finite number.`)
   return value
+}
+
+function nullableString(value: unknown, field: string): string | null {
+  if (value === null) return null
+  return string(value, field)
+}
+
+export function parseProductionCompleteOpenOrders(value: unknown): ProductionCompleteOpenOrder[] {
+  return array(value, 'productionCompleteOpenOrders').map((value) => {
+    const row = record(value, 'Dashboard production-complete sales order')
+    return {
+      salesOrderId: string(row.sales_order_id, 'sales_order_id'),
+      salesOrderName: string(row.sales_order_name, 'sales_order_name'),
+      customerName: string(row.customer_name, 'customer_name'),
+      customerPoNumber: string(row.customer_po_number, 'customer_po_number'),
+      orderDueDate: string(row.order_due_date, 'order_due_date'),
+      productionCompletedAt: string(row.production_completed_at, 'production_completed_at'),
+      shippedAt: nullableString(row.shipped_at, 'shipped_at'),
+      invoicedAt: nullableString(row.invoiced_at, 'invoiced_at'),
+    }
+  })
+}
+
+export function buildDemoProductionCompleteOpenOrders(data: ShopData): ProductionCompleteOpenOrder[] {
+  return data.salesOrders.flatMap((order) => {
+    if (order.archivedAt || (order.shippedAt && order.invoicedAt)) return []
+    const workOrders = data.workOrders.filter((workOrder) => workOrder.salesOrderId === order.id && !workOrder.archivedAt)
+    if (!workOrders.length || workOrders.some((workOrder) => !workOrder.completionDate)) return []
+    return [{
+      salesOrderId: order.id,
+      salesOrderName: order.salesOrderName,
+      customerName: order.customerName,
+      customerPoNumber: order.customerPoNumber,
+      orderDueDate: order.orderDueDate,
+      productionCompletedAt: workOrders.map((workOrder) => workOrder.completionDate!).sort().at(-1)!,
+      shippedAt: order.shippedAt,
+      invoicedAt: order.invoicedAt,
+    }]
+  }).sort((a, b) => a.productionCompletedAt.localeCompare(b.productionCompletedAt) || a.orderDueDate.localeCompare(b.orderDueDate) || a.salesOrderName.localeCompare(b.salesOrderName)).slice(0, 50)
 }
 
 export function parseDashboardMetrics(value: unknown): DashboardMetrics {

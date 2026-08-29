@@ -6,7 +6,7 @@ vi.mock('../lib/supabase', () => ({
   requireSupabase: () => ({ rpc }),
 }))
 
-import { loadDashboardMetrics, markSalesOrderMilestone } from './shopService'
+import { loadDashboardMetrics, loadProductionCompleteOpenOrders, markSalesOrderMilestone } from './shopService'
 
 describe('markSalesOrderMilestone', () => {
   beforeEach(() => rpc.mockReset())
@@ -45,5 +45,13 @@ describe('markSalesOrderMilestone', () => {
     await loadDashboardMetrics({ startDate: null, endDate: null })
 
     expect(rpc).toHaveBeenCalledWith('dashboard_metrics', { p_bucket: 'day' })
+  })
+
+  it('loads production-complete open sales orders through one bounded RPC', async () => {
+    rpc.mockResolvedValueOnce({ data: [], error: null })
+
+    await loadProductionCompleteOpenOrders()
+
+    expect(rpc).toHaveBeenCalledWith('dashboard_production_complete_open_orders')
   })
 })

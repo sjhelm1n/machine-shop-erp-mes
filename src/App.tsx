@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { OnboardingGate } from './components/OnboardingGate'
 import { useAuth } from './context/AuthContext'
 import { AppShell } from './layouts/AppShell'
 
@@ -8,6 +9,9 @@ const AuthConfirmPage = lazy(() => import('./pages/AuthPages').then((module) => 
 const ForgotPasswordPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.ForgotPasswordPage })))
 const LoginPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.LoginPage })))
 const UpdatePasswordPage = lazy(() => import('./pages/AuthPages').then((module) => ({ default: module.UpdatePasswordPage })))
+const CreateAccountPage = lazy(() => import('./pages/OnboardingPages').then((module) => ({ default: module.CreateAccountPage })))
+const FinishAccountPage = lazy(() => import('./pages/OnboardingPages').then((module) => ({ default: module.FinishAccountPage })))
+const SetupPage = lazy(() => import('./pages/OnboardingPages').then((module) => ({ default: module.SetupPage })))
 const CustomersPage = lazy(() => import('./pages/CustomersPage').then((module) => ({ default: module.CustomersPage })))
 const CustomerPortalViewPage = lazy(() => import('./pages/CustomerPortalViewPage').then((module) => ({ default: module.CustomerPortalViewPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
@@ -21,11 +25,12 @@ const SalesOrderDetailPage = lazy(() => import('./pages/SalesOrderDetailPage').t
 const SalesOrdersPage = lazy(() => import('./pages/SalesOrdersPage').then((module) => ({ default: module.SalesOrdersPage })))
 const WorkOrderDetailPage = lazy(() => import('./pages/WorkOrderDetailPage').then((module) => ({ default: module.WorkOrderDetailPage })))
 const WorkOrdersPage = lazy(() => import('./pages/WorkOrdersPage').then((module) => ({ default: module.WorkOrdersPage })))
+const UsersPage = lazy(() => import('./pages/UsersPage').then((module) => ({ default: module.UsersPage })))
 
 function HomeRedirect() {
-  const { profile, loading } = useAuth()
+  const { session, profile, loading } = useAuth()
   if (loading) return null
-  return <Navigate to={profile?.role === 'customer' ? '/portal' : profile ? '/app' : '/login'} replace />
+  return <Navigate to={profile?.role === 'customer' ? '/portal' : profile ? '/app' : session ? '/finish-account' : '/login'} replace />
 }
 
 export default function App() {
@@ -35,8 +40,11 @@ export default function App() {
     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
     <Route path="/auth/confirm" element={<AuthConfirmPage />} />
     <Route path="/update-password" element={<UpdatePasswordPage />} />
+    <Route path="/create-account" element={<CreateAccountPage />} />
+    <Route path="/finish-account" element={<FinishAccountPage />} />
+    <Route path="/setup" element={<ProtectedRoute role="manufacturer"><SetupPage /></ProtectedRoute>} />
     <Route path="/produce/:workOrderId/:stepId" element={<ProtectedRoute role="manufacturer"><ProductionPage /></ProtectedRoute>} />
-    <Route path="/app" element={<ProtectedRoute role="manufacturer"><AppShell /></ProtectedRoute>}>
+    <Route path="/app" element={<ProtectedRoute role="manufacturer"><OnboardingGate><AppShell /></OnboardingGate></ProtectedRoute>}>
       <Route index element={<DashboardPage />} />
       <Route path="customers" element={<CustomersPage />} />
       <Route path="customers/portal-view" element={<CustomerPortalViewPage />} />
@@ -47,6 +55,7 @@ export default function App() {
       <Route path="routing" element={<RoutingTemplatesPage />} />
       <Route path="questions" element={<QuestionsPage />} />
       <Route path="documents" element={<DocumentsPage />} />
+      <Route path="users" element={<UsersPage />} />
       <Route path="invoices" element={<Navigate to="/app/documents" replace />} />
     </Route>
     <Route path="/portal" element={<ProtectedRoute role="customer"><AppShell /></ProtectedRoute>}>
@@ -54,6 +63,7 @@ export default function App() {
       <Route path="orders/:orderId" element={<SalesOrderDetailPage />} />
       <Route path="questions" element={<QuestionsPage />} />
       <Route path="documents" element={<DocumentsPage />} />
+      <Route path="users" element={<UsersPage />} />
       <Route path="invoices" element={<Navigate to="/portal/documents" replace />} />
     </Route>
     <Route path="*" element={<NotFoundPage />} />

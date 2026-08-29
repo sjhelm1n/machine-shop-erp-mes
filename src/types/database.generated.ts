@@ -158,6 +158,7 @@ export type Database = {
           organization_id: string
           read_at: string | null
           sales_order_id: string | null
+          sender_display_name: string
           sender_type: string
         }
         Insert: {
@@ -169,6 +170,7 @@ export type Database = {
           organization_id: string
           read_at?: string | null
           sales_order_id?: string | null
+          sender_display_name: string
           sender_type: string
         }
         Update: {
@@ -180,6 +182,7 @@ export type Database = {
           organization_id?: string
           read_at?: string | null
           sales_order_id?: string | null
+          sender_display_name?: string
           sender_type?: string
         }
         Relationships: [
@@ -265,6 +268,7 @@ export type Database = {
           id: string
           logo_url: string | null
           organization_id: string
+          portal_email_domain: string | null
           primary_address: string
           updated_at: string
         }
@@ -276,6 +280,7 @@ export type Database = {
           id?: string
           logo_url?: string | null
           organization_id: string
+          portal_email_domain?: string | null
           primary_address?: string
           updated_at?: string
         }
@@ -287,6 +292,7 @@ export type Database = {
           id?: string
           logo_url?: string | null
           organization_id?: string
+          portal_email_domain?: string | null
           primary_address?: string
           updated_at?: string
         }
@@ -302,23 +308,32 @@ export type Database = {
       }
       organizations: {
         Row: {
+          account_claim_name: string
+          account_email_domain: string | null
           created_at: string
           id: string
           name: string
+          onboarding_completed_at: string | null
           plant_timezone: string
           updated_at: string
         }
         Insert: {
+          account_claim_name: string
+          account_email_domain?: string | null
           created_at?: string
           id?: string
           name: string
+          onboarding_completed_at?: string | null
           plant_timezone?: string
           updated_at?: string
         }
         Update: {
+          account_claim_name?: string
+          account_email_domain?: string | null
           created_at?: string
           id?: string
           name?: string
+          onboarding_completed_at?: string | null
           plant_timezone?: string
           updated_at?: string
         }
@@ -414,29 +429,47 @@ export type Database = {
       }
       profiles: {
         Row: {
+          activated_at: string | null
           created_at: string
           customer_id: string | null
           display_name: string
+          email: string
           id: string
+          invited_at: string | null
+          invited_by: string | null
+          is_super_admin: boolean
           organization_id: string
+          position: string | null
           role: Database["public"]["Enums"]["profile_role"]
           updated_at: string
         }
         Insert: {
+          activated_at?: string | null
           created_at?: string
           customer_id?: string | null
           display_name: string
+          email: string
           id: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_super_admin?: boolean
           organization_id: string
+          position?: string | null
           role: Database["public"]["Enums"]["profile_role"]
           updated_at?: string
         }
         Update: {
+          activated_at?: string | null
           created_at?: string
           customer_id?: string | null
           display_name?: string
+          email?: string
           id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_super_admin?: boolean
           organization_id?: string
+          position?: string | null
           role?: Database["public"]["Enums"]["profile_role"]
           updated_at?: string
         }
@@ -736,6 +769,73 @@ export type Database = {
           },
         ]
       }
+      user_invitations: {
+        Row: {
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          customer_id: string | null
+          display_name: string
+          email: string
+          id: string
+          invited_by: string | null
+          organization_id: string
+          position: string | null
+          role: Database["public"]["Enums"]["profile_role"]
+          user_id: string | null
+        }
+        Insert: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          customer_id?: string | null
+          display_name: string
+          email: string
+          id?: string
+          invited_by?: string | null
+          organization_id: string
+          position?: string | null
+          role: Database["public"]["Enums"]["profile_role"]
+          user_id?: string | null
+        }
+        Update: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          customer_id?: string | null
+          display_name?: string
+          email?: string
+          id?: string
+          invited_by?: string | null
+          organization_id?: string
+          position?: string | null
+          role?: Database["public"]["Enums"]["profile_role"]
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_invitations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_invitations_customer_id_organization_id_fkey"
+            columns: ["customer_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "user_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       work_orders: {
         Row: {
           archived_at: string | null
@@ -837,14 +937,55 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activate_my_profile: { Args: never; Returns: undefined }
       add_sales_order_line: {
         Args: { p_line: Json; p_sales_order_id: string }
         Returns: string
+      }
+      cancel_user_invitation: {
+        Args: { p_invitation_id: string }
+        Returns: undefined
+      }
+      claim_shop_account: {
+        Args: {
+          p_display_name: string
+          p_organization_name: string
+          p_plant_timezone: string
+        }
+        Returns: Json
+      }
+      complete_my_organization_onboarding: {
+        Args: { p_organization_name: string; p_plant_timezone: string }
+        Returns: Json
+      }
+      complete_user_invitation: {
+        Args: { p_invitation_id: string; p_user_id: string }
+        Returns: undefined
       }
       create_sales_order: {
         Args: { p_lines: Json; p_order: Json }
         Returns: string
       }
+      create_user_invitation:
+        | {
+            Args: {
+              p_customer_id?: string
+              p_display_name: string
+              p_email: string
+              p_role: Database["public"]["Enums"]["profile_role"]
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_customer_id: string
+              p_display_name: string
+              p_email: string
+              p_position: string
+              p_role: Database["public"]["Enums"]["profile_role"]
+            }
+            Returns: Json
+          }
       create_work_order: {
         Args: { p_routing: Json; p_work_order: Json }
         Returns: string
@@ -865,6 +1006,7 @@ export type Database = {
       customer_portal_sales_orders: {
         Args: never
         Returns: {
+          customer_completed: boolean
           customer_id: string
           customer_name: string
           customer_po_number: string
@@ -895,6 +1037,19 @@ export type Database = {
       dashboard_metrics: {
         Args: { p_bucket?: string; p_end_date?: string; p_start_date?: string }
         Returns: Json
+      }
+      dashboard_production_complete_open_orders: {
+        Args: never
+        Returns: {
+          customer_name: string
+          customer_po_number: string
+          invoiced_at: string
+          order_due_date: string
+          production_completed_at: string
+          sales_order_id: string
+          sales_order_name: string
+          shipped_at: string
+        }[]
       }
       mark_sales_order_milestone: {
         Args: { p_milestone: string; p_sales_order_id: string }
@@ -976,6 +1131,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      remove_user_access: { Args: { p_user_id: string }; Returns: string }
       reverse_production_event: {
         Args: { p_event_id: string }
         Returns: undefined

@@ -1,4 +1,4 @@
-import { ChevronDown, ClipboardList, Factory, Files, HelpCircle, LayoutDashboard, LogOut, Menu, MonitorCheck, PackageCheck, Route as RouteIcon, Users, X } from 'lucide-react'
+import { ChevronDown, ClipboardList, Factory, Files, HelpCircle, LayoutDashboard, LogOut, Menu, MonitorCheck, PackageCheck, Route as RouteIcon, UserCog, Users, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -30,12 +30,14 @@ const manufacturerNav: NavItem[] = [
       { to: '/app/customers/portal-view', label: 'Customer Portal View', icon: MonitorCheck },
     ],
   },
+  { to: '/app/users', label: 'Users', icon: UserCog },
 ]
 
 const portalNav: NavItem[] = [
   { to: '/portal', label: 'My orders', icon: PackageCheck, end: true },
   { to: '/portal/questions', label: 'Questions', icon: HelpCircle },
   { to: '/portal/documents', label: 'Documents', icon: Files },
+  { to: '/portal/users', label: 'Users', icon: UserCog },
 ]
 
 function SidebarNavLink({ item, onNavigate }: { item: NavItem; onNavigate: () => void }) {

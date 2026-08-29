@@ -26,8 +26,8 @@ export const demoData: ShopData = {
     },
   ],
   customers: [
-    { id: acmeId, organizationId: orgId, customerName: 'Acme Motion Systems', logoUrl: null, primaryAddress: '4800 Industrial Pkwy\nDetroit, MI 48211', defaultShipToAddress: '4800 Industrial Pkwy\nDetroit, MI 48211', defaultBillToAddress: 'PO Box 922\nDetroit, MI 48231' },
-    { id: northstarId, organizationId: orgId, customerName: 'Northstar Robotics', logoUrl: null, primaryAddress: '1190 Innovation Dr\nAnn Arbor, MI 48108', defaultShipToAddress: '1190 Innovation Dr\nAnn Arbor, MI 48108', defaultBillToAddress: '1190 Innovation Dr\nAnn Arbor, MI 48108' },
+    { id: acmeId, organizationId: orgId, customerName: 'Acme Motion Systems', logoUrl: null, emailDomain: 'acmemotion.com', primaryAddress: '4800 Industrial Pkwy\nDetroit, MI 48211', defaultShipToAddress: '4800 Industrial Pkwy\nDetroit, MI 48211', defaultBillToAddress: 'PO Box 922\nDetroit, MI 48231' },
+    { id: northstarId, organizationId: orgId, customerName: 'Northstar Robotics', logoUrl: null, emailDomain: 'northstarrobotics.com', primaryAddress: '1190 Innovation Dr\nAnn Arbor, MI 48108', defaultShipToAddress: '1190 Innovation Dr\nAnn Arbor, MI 48108', defaultBillToAddress: '1190 Innovation Dr\nAnn Arbor, MI 48108' },
   ],
   salesOrders: [
     {
@@ -91,9 +91,9 @@ export const demoData: ShopData = {
     { id: 'ev-12', organizationId: orgId, workOrderId: 'wo-260796', routingStepId: 'step-796-20', eventType: 'transfer', quantity: 24, fromRoutingStepId: 'step-796-20', toRoutingStepId: null, reversedEventId: null, actorId: null, requestId: 'demo-ev-12', createdAt: '2026-08-13T15:30:00Z' },
   ],
   questions: [
-    { id: 'q-1', organizationId: orgId, customerId: acmeId, salesOrderId: 'so-1048', senderType: 'customer', message: 'Can you confirm the first 25 pieces will be ready by Thursday?', createdAt: '2026-08-25T13:12:00Z', readAt: null },
-    { id: 'q-2', organizationId: orgId, customerId: northstarId, salesOrderId: 'so-1051', senderType: 'customer', message: 'Please let us know when final inspection begins so we can arrange pickup.', createdAt: '2026-08-24T18:30:00Z', readAt: '2026-08-25T12:00:00Z' },
-    { id: 'q-3', organizationId: orgId, customerId: northstarId, salesOrderId: 'so-1051', senderType: 'manufacturer', message: 'Will do. We expect inspection early next week.', createdAt: '2026-08-25T12:04:00Z', readAt: null },
+    { id: 'q-1', organizationId: orgId, customerId: acmeId, salesOrderId: 'so-1048', senderType: 'customer', senderName: 'Morgan Lee', message: 'Can you confirm the first 25 pieces will be ready by Thursday?', createdAt: '2026-08-25T13:12:00Z', readAt: null },
+    { id: 'q-2', organizationId: orgId, customerId: northstarId, salesOrderId: 'so-1051', senderType: 'customer', senderName: 'Priya Shah', message: 'Please let us know when final inspection begins so we can arrange pickup.', createdAt: '2026-08-24T18:30:00Z', readAt: '2026-08-25T12:00:00Z' },
+    { id: 'q-3', organizationId: orgId, customerId: northstarId, salesOrderId: 'so-1051', senderType: 'manufacturer', senderName: 'Jamie Chen', message: 'Will do. We expect inspection early next week.', createdAt: '2026-08-25T12:04:00Z', readAt: null },
   ],
   documents: [
     { id: 'inv-1', organizationId: orgId, customerId: acmeId, salesOrderId: 'so-1039', documentType: 'invoice', documentName: 'INV-4382', documentDate: '2026-08-14', amount: 2112, filePath: `${orgId}/${acmeId}/INV-4382.pdf`, uploadedAt: '2026-08-14T16:20:00Z' },

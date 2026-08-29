@@ -1,7 +1,8 @@
 import type { AppRole, CustomerDocument, PricingType, ProductionEvent, ProductionStepSnapshot, Question, ShopData, StepMetrics } from '../domain/types'
 import { parseProductionEvent, parseProductionStepSnapshot } from '../domain/databaseValidation'
-import { parseDashboardMetrics, type DashboardMetrics, type DashboardRange } from '../domain/dashboard'
+import { parseDashboardMetrics, parseProductionCompleteOpenOrders, type DashboardMetrics, type DashboardRange, type ProductionCompleteOpenOrder } from '../domain/dashboard'
 import { validateDocumentPdf } from '../domain/documentSecurity'
+import { normalizeEmailDomain } from '../domain/userManagement'
 import { requireSupabase } from '../lib/supabase'
 import type { Database, Tables } from '../types/database.generated'
 
@@ -60,10 +61,10 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
   const [organization, templatesResult, customersResult, salesOrdersResult, workOrdersResult, questionsResult, documentsResult] = await Promise.all([
     client.from('organizations').select('id, name, plant_timezone').single(),
     client.from('routing_templates').select('id, organization_id, template_name, archived_at').order('template_name').order('id'),
-    client.from('customers').select('id, organization_id, customer_name, logo_url, primary_address, default_ship_to_address, default_bill_to_address').order('customer_name').order('id').limit(limit + 1),
+    client.from('customers').select('id, organization_id, customer_name, logo_url, portal_email_domain, primary_address, default_ship_to_address, default_bill_to_address').order('customer_name').order('id').limit(limit + 1),
     client.from('sales_orders').select('id, organization_id, sales_order_number, sales_order_name, customer_id, customer_name, customer_address, customer_po_number, ship_to_address, bill_to_address, date_received, order_due_date, shipped_at, invoiced_at, archived_at, notes').order('date_received', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
     client.from('work_orders').select('id, organization_id, work_order_number, work_order_name, sales_order_id, sales_order_line_item_id, part_number, quantity_ordered, due_date, released_at, completion_date, archived_at, notes').order('due_date').order('id').limit(limit + 1),
-    client.from('customer_messages').select('id, organization_id, customer_id, sales_order_id, sender_type, message, created_at, read_at').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
+    client.from('customer_messages').select('id, organization_id, customer_id, sales_order_id, sender_type, sender_display_name, message, created_at, read_at').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
     client.from('customer_documents').select('id, organization_id, customer_id, sales_order_id, document_type, document_name, document_date, amount, file_path, uploaded_at').order('document_date', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
   ])
   const firstError = [organization, templatesResult, customersResult, salesOrdersResult, workOrdersResult, questionsResult, documentsResult].find((result) => result.error)?.error
@@ -113,11 +114,11 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
   return {
     organization: { id: organization.data.id, name: organization.data.name, plantTimezone: organization.data.plant_timezone },
     routingTemplates: (templatesResult.data ?? []).map((template) => ({ id: template.id, organizationId: template.organization_id, templateName: template.template_name, archivedAt: template.archived_at, steps: (stepsByTemplate.get(template.id) ?? []).map((step) => ({ id: step.id, routingTemplateId: step.routing_template_id, sequenceNumber: step.sequence_number, routingStepName: step.routing_step_name, customerStageName: step.customer_stage_name, workInstructions: step.work_instructions })) })),
-    customers: customers.rows.map((row) => ({ id: row.id, organizationId: row.organization_id, customerName: row.customer_name, logoUrl: row.logo_url, primaryAddress: row.primary_address, defaultShipToAddress: row.default_ship_to_address, defaultBillToAddress: row.default_bill_to_address })),
+    customers: customers.rows.map((row) => ({ id: row.id, organizationId: row.organization_id, customerName: row.customer_name, logoUrl: row.logo_url, emailDomain: row.portal_email_domain, primaryAddress: row.primary_address, defaultShipToAddress: row.default_ship_to_address, defaultBillToAddress: row.default_bill_to_address })),
     salesOrders: salesOrders.rows.map((row) => ({ id: row.id, organizationId: row.organization_id, salesOrderNumber: row.sales_order_number, salesOrderName: row.sales_order_name, customerId: row.customer_id, customerName: row.customer_name, customerAddress: row.customer_address, customerPoNumber: row.customer_po_number, shipToAddress: row.ship_to_address, billToAddress: row.bill_to_address, dateReceived: row.date_received, orderDueDate: row.order_due_date, shippedAt: row.shipped_at, invoicedAt: row.invoiced_at, archivedAt: row.archived_at, notes: row.notes, lines: (linesByOrder.get(row.id) ?? []).map((line) => ({ id: line.id, salesOrderId: line.sales_order_id, lineNumber: line.line_number, partNumber: line.part_number, description: line.description, manufacturedItem: line.manufactured_item, pricingType: pricingType(line.pricing_type), quantity: line.quantity, unitPrice: line.unit_price, flatRateAmount: line.flat_rate_amount, lineTotal: line.line_total ?? 0, sortOrder: line.sort_order, archivedAt: line.archived_at })) })),
     workOrders: workOrders.rows.map((row) => ({ id: row.id, organizationId: row.organization_id, workOrderNumber: row.work_order_number, workOrderName: row.work_order_name, salesOrderId: row.sales_order_id, salesOrderLineItemId: row.sales_order_line_item_id, partNumber: row.part_number, quantityOrdered: row.quantity_ordered, dueDate: row.due_date, releasedAt: row.released_at, completionDate: row.completion_date, archivedAt: row.archived_at, notes: row.notes, routing: (routingByWorkOrder.get(row.id) ?? []).map((step) => ({ id: step.id, workOrderId: step.work_order_id, sequenceNumber: step.sequence_number, routingStepName: step.routing_step_name, customerStageName: step.customer_stage_name, workInstructions: step.work_instructions, notes: step.notes })), stepMetrics: (metricsByWorkOrder.get(row.id) ?? []).map(mapMetric) })),
     productionEvents: [],
-    questions: [...questions.rows].reverse().map((row) => ({ id: row.id, organizationId: row.organization_id, customerId: row.customer_id, salesOrderId: row.sales_order_id, senderType: senderType(row.sender_type), message: row.message, createdAt: row.created_at, readAt: row.read_at })),
+    questions: [...questions.rows].reverse().map((row) => ({ id: row.id, organizationId: row.organization_id, customerId: row.customer_id, salesOrderId: row.sales_order_id, senderType: senderType(row.sender_type), senderName: row.sender_display_name, message: row.message, createdAt: row.created_at, readAt: row.read_at })),
     documents: documents.rows.map(mapCustomerDocument),
     pageInfo: { limit, customersHasMore: customers.hasMore, salesOrdersHasMore: salesOrders.hasMore, workOrdersHasMore: workOrders.hasMore, questionsHasMore: questions.hasMore, documentsHasMore: documents.hasMore },
   }
@@ -131,7 +132,7 @@ async function loadCustomerPortalData(limit: number): Promise<ShopData> {
     client.rpc('customer_portal_sales_orders'),
     client.rpc('customer_portal_sales_order_lines'),
     client.rpc('customer_portal_work_orders'),
-    client.from('customer_messages').select('id, organization_id, customer_id, sales_order_id, sender_type, message, created_at, read_at').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
+    client.from('customer_messages').select('id, organization_id, customer_id, sales_order_id, sender_type, sender_display_name, message, created_at, read_at').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
     client.from('customer_documents').select('id, organization_id, customer_id, sales_order_id, document_type, document_name, document_date, amount, file_path, uploaded_at').order('document_date', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
   ])
   const firstError = [organization, customers, salesOrders, lines, workOrders, questions, documents]
@@ -150,6 +151,7 @@ async function loadCustomerPortalData(limit: number): Promise<ShopData> {
       organizationId: String(customers.data.organization_id),
       customerName: String(customers.data.customer_name),
       logoUrl: null,
+      emailDomain: null,
       primaryAddress: '',
       defaultShipToAddress: '',
       defaultBillToAddress: '',
@@ -169,6 +171,7 @@ async function loadCustomerPortalData(limit: number): Promise<ShopData> {
       orderDueDate: String(row.order_due_date),
       shippedAt: row.shipped_at ? String(row.shipped_at) : null,
       invoicedAt: row.invoiced_at ? String(row.invoiced_at) : null,
+      customerCompleted: Boolean(row.customer_completed),
       archivedAt: null,
       notes: '',
       lines: (lineRowsByOrder.get(row.id) ?? []).map((line) => ({
@@ -206,7 +209,7 @@ async function loadCustomerPortalData(limit: number): Promise<ShopData> {
       customerStageName: String(row.customer_stage_name),
     })),
     productionEvents: [],
-    questions: [...questionPage.rows].reverse().map((row) => ({ id: row.id, organizationId: row.organization_id, customerId: row.customer_id, salesOrderId: row.sales_order_id, senderType: senderType(row.sender_type), message: row.message, createdAt: row.created_at, readAt: row.read_at })),
+    questions: [...questionPage.rows].reverse().map((row) => ({ id: row.id, organizationId: row.organization_id, customerId: row.customer_id, salesOrderId: row.sales_order_id, senderType: senderType(row.sender_type), senderName: row.sender_display_name, message: row.message, createdAt: row.created_at, readAt: row.read_at })),
     documents: documentPage.rows.map(mapCustomerDocument),
     pageInfo: { limit, customersHasMore: false, salesOrdersHasMore: false, workOrdersHasMore: false, questionsHasMore: questionPage.hasMore, documentsHasMore: documentPage.hasMore },
   }
@@ -230,6 +233,12 @@ export async function loadDashboardMetrics(range: DashboardRange): Promise<Dashb
   return parseDashboardMetrics(data)
 }
 
+export async function loadProductionCompleteOpenOrders(): Promise<ProductionCompleteOpenOrder[]> {
+  const { data, error } = await requireSupabase().rpc('dashboard_production_complete_open_orders')
+  if (error) throw error
+  return parseProductionCompleteOpenOrders(data)
+}
+
 export async function recordProductionEvent(input: { workOrderId: string; routingStepId: string; eventType: 'transfer' | 'scrap'; quantity: number; toRoutingStepId?: string | null; requestId: string }): Promise<ProductionEvent> {
   const { data, error } = await requireSupabase().rpc('record_production_event_v2', productionEventArgs(input)).single()
   if (error) throw error
@@ -247,7 +256,7 @@ export async function recordProductionAdjustment(input: { workOrderId: string; r
 }
 
 export async function sendQuestion(input: Omit<Question, 'id' | 'createdAt' | 'readAt'>): Promise<void> {
-  const { error } = await requireSupabase().from('customer_messages').insert({ organization_id: input.organizationId, customer_id: input.customerId, sales_order_id: input.salesOrderId, sender_type: input.senderType, message: input.message })
+  const { error } = await requireSupabase().from('customer_messages').insert({ organization_id: input.organizationId, customer_id: input.customerId, sales_order_id: input.salesOrderId, sender_type: input.senderType, sender_display_name: input.senderName, message: input.message })
   if (error) throw error
 }
 
@@ -291,6 +300,7 @@ export interface CustomerInput {
   organizationId: string
   customerName: string
   logoUrl: string
+  emailDomain: string
   primaryAddress: string
   shipToAddress: string
   billToAddress: string
@@ -348,12 +358,14 @@ export interface RoutingTemplateInput {
 }
 
 export async function createCustomer(input: CustomerInput): Promise<void> {
-  const { error } = await requireSupabase().from('customers').insert({ organization_id: input.organizationId, customer_name: input.customerName, logo_url: normalizeCustomerLogoUrl(input.logoUrl), primary_address: input.primaryAddress, default_ship_to_address: input.shipToAddress, default_bill_to_address: input.billToAddress })
+  const values = { organization_id: input.organizationId, customer_name: input.customerName, logo_url: normalizeCustomerLogoUrl(input.logoUrl), portal_email_domain: normalizeEmailDomain(input.emailDomain) || null, primary_address: input.primaryAddress, default_ship_to_address: input.shipToAddress, default_bill_to_address: input.billToAddress }
+  const { error } = await requireSupabase().from('customers').insert(values)
   if (error) throw error
 }
 
 export async function updateCustomer(customerId: string, input: CustomerInput): Promise<void> {
-  const { error } = await requireSupabase().from('customers').update({ customer_name: input.customerName, logo_url: normalizeCustomerLogoUrl(input.logoUrl), primary_address: input.primaryAddress, default_ship_to_address: input.shipToAddress, default_bill_to_address: input.billToAddress }).eq('id', customerId).eq('organization_id', input.organizationId).select('id').single()
+  const values = { customer_name: input.customerName, logo_url: normalizeCustomerLogoUrl(input.logoUrl), portal_email_domain: normalizeEmailDomain(input.emailDomain) || null, primary_address: input.primaryAddress, default_ship_to_address: input.shipToAddress, default_bill_to_address: input.billToAddress }
+  const { error } = await requireSupabase().from('customers').update(values).eq('id', customerId).eq('organization_id', input.organizationId).select('id').single()
   if (error) throw error
 }
 

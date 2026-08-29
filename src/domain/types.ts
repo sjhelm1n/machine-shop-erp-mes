@@ -15,6 +15,7 @@ export interface Profile {
   customerId: string | null
   displayName: string
   role: AppRole
+  isSuperAdmin: boolean
 }
 
 export interface Customer {
@@ -22,6 +23,7 @@ export interface Customer {
   organizationId: string
   customerName: string
   logoUrl: string | null
+  emailDomain: string | null
   primaryAddress: string
   defaultShipToAddress: string
   defaultBillToAddress: string
@@ -58,6 +60,7 @@ export interface SalesOrder {
   orderDueDate: string
   shippedAt: string | null
   invoicedAt: string | null
+  customerCompleted?: boolean
   archivedAt: string | null
   notes: string
   lines: SalesOrderLine[]
@@ -161,6 +164,7 @@ export interface Question {
   customerId: string
   salesOrderId: string | null
   senderType: AppRole
+  senderName: string
   message: string
   createdAt: string
   readAt: string | null
