@@ -1,7 +1,7 @@
 import { Camera, LoaderCircle, QrCode, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getProductionRouteFromQrData } from '../domain/productionQr'
+import { getShopCoreRouteFromQrData } from '../domain/productionQr'
 
 function cameraErrorMessage(reason: unknown) {
   if (!window.isSecureContext) return 'Camera scanning requires a secure HTTPS connection.'
@@ -33,13 +33,13 @@ export function ProductionQrScanner({ onClose }: { onClose: () => void }) {
         scanner = new QrScanner(videoRef.current, (result) => {
           if (handled.current) return
           try {
-            const route = getProductionRouteFromQrData(result.data, window.location.origin)
+            const route = getShopCoreRouteFromQrData(result.data, window.location.origin)
             handled.current = true
             scanner?.stop()
             onClose()
             navigate(route)
           } catch (reason) {
-            setError(reason instanceof Error ? reason.message : 'Scan a ShopCore traveler QR code.')
+            setError(reason instanceof Error ? reason.message : 'Scan a ShopCore traveler or Tool Assembly QR code.')
           }
         }, {
           onDecodeError: (reason) => {
@@ -68,12 +68,12 @@ export function ProductionQrScanner({ onClose }: { onClose: () => void }) {
 
   return <div className="qr-scanner-backdrop" role="presentation">
     <section className="qr-scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="qr-scanner-title">
-      <header><div><QrCode size={19} /><h2 id="qr-scanner-title">Scan traveler QR</h2></div><button type="button" onClick={onClose} aria-label="Close QR scanner"><X size={22} /></button></header>
+      <header><div><QrCode size={19} /><h2 id="qr-scanner-title">Scan ShopCore QR</h2></div><button type="button" onClick={onClose} aria-label="Close QR scanner"><X size={22} /></button></header>
       <div className="qr-camera-frame">
         <video ref={videoRef} muted playsInline aria-label="Camera preview" />
         {!ready && !error && <div className="qr-camera-status"><LoaderCircle className="spin" /><span>Starting camera…</span></div>}
       </div>
-      <div className="qr-scanner-copy"><Camera size={18} /><p>Point the rear camera at a routing-step QR code on a ShopCore traveler.</p></div>
+      <div className="qr-scanner-copy"><Camera size={18} /><p>Scan a traveler routing-step QR code or a Tool Assembly QR label.</p></div>
       {error && <p className="qr-scanner-error" role="alert">{error}</p>}
     </section>
   </div>

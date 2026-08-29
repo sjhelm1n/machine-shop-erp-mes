@@ -1,13 +1,15 @@
 import { Archive, ArchiveRestore, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { Badge, Button, EmptyState, Modal, PageHeader } from '../components/Ui'
+import { ToolingEditor } from '../components/ToolingEditor'
 import { useShop } from '../context/ShopContext'
 import type { RoutingTemplate } from '../domain/types'
 import { moveRoutingDraft } from '../domain/routingOrder'
+import type { ToolingDraft } from '../domain/tooling'
 
-type DraftStep = { key: string; name: string; stage: string; instructions: string }
+type DraftStep = { key: string; name: string; stage: string; instructions: string; tooling: ToolingDraft[] }
 
-const blankStep = (): DraftStep => ({ key: crypto.randomUUID(), name: '', stage: 'In production', instructions: '' })
+const blankStep = (): DraftStep => ({ key: crypto.randomUUID(), name: '', stage: 'In production', instructions: '', tooling: [] })
 
 export function RoutingTemplatesPage() {
   const { data, saveRoutingTemplate, setRoutingTemplateArchived } = useShop()
@@ -38,7 +40,13 @@ export function RoutingTemplatesPage() {
     setTemplateId(template.id)
     setEditing(true)
     setTemplateName(template.templateName)
-    setSteps(template.steps.map((step) => ({ key: step.id, name: step.routingStepName, stage: step.customerStageName, instructions: step.workInstructions })))
+    setSteps(template.steps.map((step) => ({
+      key: step.id,
+      name: step.routingStepName,
+      stage: step.customerStageName,
+      instructions: step.workInstructions,
+      tooling: (step.tooling ?? []).map((tool) => ({ key: tool.id, toolAssemblyId: tool.toolAssemblyId, toolNumber: tool.toolNumber, notes: tool.notes })),
+    })))
     setError('')
     setEditorOpen(true)
   }
@@ -72,7 +80,7 @@ export function RoutingTemplatesPage() {
         id: templateId,
         organizationId: data.organization.id,
         templateName,
-        steps: steps.map((step) => ({ name: step.name, customerStageName: step.stage, instructions: step.instructions })),
+        steps: steps.map((step) => ({ name: step.name, customerStageName: step.stage, instructions: step.instructions, tooling: step.tooling })),
       })
       setEditorOpen(false)
     } catch (reason) {
@@ -96,7 +104,7 @@ export function RoutingTemplatesPage() {
     {error && !editorOpen && <p className="form-error">{error}</p>}
     {templates.length === 0 ? <EmptyState title={showArchived ? 'No archived routings' : 'No routing templates yet'} body={showArchived ? 'Archived routing templates will appear here.' : 'Create a routing once and reuse it when releasing work orders.'} /> : <div className="routing-template-list">{templates.map((template) => <article className="panel routing-template-card" key={template.id}>
       <header><div><h2>{template.templateName}</h2><span>{template.steps.length} step{template.steps.length === 1 ? '' : 's'}</span></div><div className="panel-actions">{template.archivedAt && <Badge>Archived</Badge>}<Button variant="secondary" disabled={Boolean(template.archivedAt) || archiveBusyId === template.id} onClick={() => openEdit(template)}><Pencil size={15} /> Edit</Button><Button variant="secondary" disabled={archiveBusyId === template.id} onClick={() => void toggleArchived(template)}>{template.archivedAt ? <ArchiveRestore size={15} /> : <Archive size={15} />}{archiveBusyId === template.id ? 'Saving…' : template.archivedAt ? 'Restore' : 'Archive'}</Button></div></header>
-      <ol>{template.steps.map((step) => <li key={step.id}><span>{step.sequenceNumber}</span><div><strong>{step.routingStepName}</strong><small>{step.customerStageName}</small></div><p>{step.workInstructions || 'No work instructions'}</p></li>)}</ol>
+      <ol>{template.steps.map((step) => <li key={step.id}><span>{step.sequenceNumber}</span><div><strong>{step.routingStepName}</strong><small>{step.customerStageName}</small>{(step.tooling?.length ?? 0) > 0 && <div className="routing-template-tooling">{step.tooling!.map((tool) => <span key={tool.id}><b>{tool.toolNumber}</b> {tool.toolAssemblyNumber} · {tool.toolAssemblyName}{tool.toolAssemblyDescription ? <small>Assembly description: {tool.toolAssemblyDescription}</small> : null}</span>)}</div>}</div><p>{step.workInstructions || 'No work instructions'}</p></li>)}</ol>
     </article>)}</div>}
     {editorOpen && <Modal title={editing ? 'Edit routing template' : 'New routing template'} onClose={() => !busy && setEditorOpen(false)}><form className="entity-form routing-template-form" onSubmit={submit}>
       <label className="full">Template name<input autoFocus maxLength={120} value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Example: Standard mill route" required /></label>
@@ -106,6 +114,7 @@ export function RoutingTemplatesPage() {
         <label>Internal step<input maxLength={120} value={step.name} onChange={(event) => setSteps((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, name: event.target.value } : candidate))} required /></label>
         <label>Customer stage<input maxLength={120} value={step.stage} onChange={(event) => setSteps((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, stage: event.target.value } : candidate))} required /></label>
         <label className="instruction-field">Work instructions<textarea value={step.instructions} onChange={(event) => setSteps((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, instructions: event.target.value } : candidate))} /></label>
+        <div className="operation-tooling-editor"><ToolingEditor idPrefix={`routing-${step.key}`} rows={step.tooling} toolAssemblies={data.toolAssemblies} onChange={(tooling) => setSteps((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, tooling } : candidate))} /></div>
         <button type="button" className="icon-button" aria-label={`Remove ${step.name || `step ${index + 1}`}`} disabled={steps.length === 1} onClick={() => setSteps((current) => current.filter((candidate) => candidate.key !== step.key))}><Trash2 size={16} /></button>
       </div>)}</div>
       <p className="subtle full">Template edits only affect future selections. Existing work-order routings remain unchanged.</p>

@@ -1,10 +1,26 @@
 import jsPDF from 'jspdf'
 import QRCode from 'qrcode'
-import type { SalesOrder, WorkOrder } from '../domain/types'
+import type { SalesOrder, WorkOrder, WorkOrderOperationTool } from '../domain/types'
 import { formatDate } from '../lib/format'
 
 const margin = 14
 const lineHeight = 4.2
+const toolingLineHeight = 3.6
+const toolNumberWidth = 32
+const toolAssemblyWidth = 30
+
+const toolNumberCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+export function toolingForOperation(
+  operationId: string,
+  assignments: readonly WorkOrderOperationTool[] = [],
+): WorkOrderOperationTool[] {
+  return assignments
+    .filter((assignment) => assignment.workOrderOperationId === operationId)
+    .sort((left, right) => toolNumberCollator.compare(left.toolNumber, right.toolNumber)
+      || left.sequenceNumber - right.sequenceNumber
+      || left.toolAssemblyNumber.localeCompare(right.toolAssemblyNumber))
+}
 
 export async function generateTravelerPdf(workOrder: WorkOrder, salesOrder: SalesOrder): Promise<void> {
   const pdf = new jsPDF({ unit: 'mm', format: 'letter' })
@@ -91,6 +107,72 @@ export async function generateTravelerPdf(workOrder: WorkOrder, salesOrder: Sale
     y += 4
   }
 
+  const drawToolingSection = (operationId: string, sequenceNumber: number) => {
+    const assignments = toolingForOperation(operationId, workOrder.operationTooling)
+    if (assignments.length === 0) return false
+
+    y += 2
+
+    const inset = 5
+    const innerWidth = contentWidth - inset * 2
+    const descriptionWidth = innerWidth - toolNumberWidth - toolAssemblyWidth
+    const rows = assignments.map((assignment) => ({
+      assignment,
+      descriptionLines: wrap([assignment.toolAssemblyName || '—', assignment.toolAssemblyDescription ? `Description: ${assignment.toolAssemblyDescription}` : ''].filter(Boolean).join('\n'), descriptionWidth),
+    }))
+    let rowIndex = 0
+    let continued = false
+
+    while (rowIndex < rows.length) {
+      const headerHeight = 12
+      const minimumRowHeight = Math.max(toolingLineHeight, rows[rowIndex].descriptionLines.length * toolingLineHeight) + 2.5
+      ensureSpace(headerHeight + minimumRowHeight + 3)
+
+      const chunkStart = rowIndex
+      let chunkHeight = headerHeight
+      while (rowIndex < rows.length) {
+        const rowHeight = Math.max(toolingLineHeight, rows[rowIndex].descriptionLines.length * toolingLineHeight) + 2.5
+        if (rowIndex > chunkStart && y + chunkHeight + rowHeight + 3 > bottom) break
+        chunkHeight += rowHeight
+        rowIndex += 1
+      }
+      const blockHeight = chunkHeight + 3
+
+      pdf.setFillColor(249, 250, 248)
+      pdf.setDrawColor(196, 201, 197)
+      pdf.roundedRect(margin, y, contentWidth, blockHeight, 1.5, 1.5, 'FD')
+      pdf.setTextColor(31, 80, 48)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(7)
+      pdf.text(continued ? `TOOLING — STEP ${sequenceNumber} CONTINUED` : 'TOOLING', margin + inset, y + 5)
+      pdf.setTextColor(92, 99, 93)
+      pdf.setFontSize(5.8)
+      pdf.text('TOOL NUMBER / POSITION', margin + inset, y + 9)
+      pdf.text('TOOL ASSEMBLY', margin + inset + toolNumberWidth, y + 9)
+      pdf.text('NAME / DESCRIPTION', margin + inset + toolNumberWidth + toolAssemblyWidth, y + 9)
+
+      let rowY = y + headerHeight
+      for (const row of rows.slice(chunkStart, rowIndex)) {
+        const rowHeight = Math.max(toolingLineHeight, row.descriptionLines.length * toolingLineHeight) + 2.5
+        pdf.setDrawColor(222, 225, 222)
+        pdf.line(margin + inset, rowY - 1.5, pageWidth - margin - inset, rowY - 1.5)
+        pdf.setTextColor(22, 27, 23)
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(7.5)
+        pdf.text(row.assignment.toolNumber, margin + inset, rowY + 1.5)
+        pdf.text(row.assignment.toolAssemblyNumber, margin + inset + toolNumberWidth, rowY + 1.5)
+        pdf.setFont('helvetica', 'normal')
+        pdf.text(row.descriptionLines, margin + inset + toolNumberWidth + toolAssemblyWidth, rowY + 1.5)
+        rowY += rowHeight
+      }
+
+      y += blockHeight
+      continued = true
+      if (rowIndex < rows.length) addContinuationPage()
+    }
+    return true
+  }
+
   drawPageHeader(false)
   drawMetaRow(['SALES ORDER', salesOrder.salesOrderNumber], ['CUSTOMER PO', salesOrder.customerPoNumber])
   drawMetaRow(['CUSTOMER', salesOrder.customerName], ['QUANTITY', String(workOrder.quantityOrdered)])
@@ -133,9 +215,11 @@ export async function generateTravelerPdf(workOrder: WorkOrder, salesOrder: Sale
       pdf.setFontSize(8.5)
       pdf.setTextColor(22, 27, 23)
       pdf.text(chunk, margin + 5, y + headingHeight, { maxWidth: textWidth })
-      y += blockHeight + 6
+      y += blockHeight
       firstBlock = false
     }
+    drawToolingSection(step.id, step.sequenceNumber)
+    y += 6
   }
 
   ensureSpace(34)

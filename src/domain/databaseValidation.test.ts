@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseProductionEvent, parseProductionStepSnapshot } from './databaseValidation'
+import { parseProductionEvent, parseProductionStepSnapshot, parseProductionToolCheckoutRequirement } from './databaseValidation'
 
 describe('database contract validation', () => {
   it('maps a production event returned by the posting RPC', () => {
@@ -36,6 +36,19 @@ describe('database contract validation', () => {
       workOrderId: 'wo-1', workOrderName: '000001', partNumber: 'PART-1', archivedAt: null,
       stepId: 'step-1', sequenceNumber: 10, routingStepName: 'Mill', available: 8,
       transferred: 2, scrapped: 0, nextStepId: 'step-2', nextStepName: 'Inspect',
+      toolCheckoutRequirements: [],
+    })
+  })
+
+  it('maps destination Tool Assembly checkout requirements for the operator screen', () => {
+    expect(parseProductionToolCheckoutRequirement({
+      operation_role: 'next', routing_step_id: 'step-2', sequence_number: 20, routing_step_name: 'Mill',
+      tool_assembly_id: 'tool-1', assembly_number: 'TA-001', tool_name: 'Face mill',
+      tool_description: 'Balanced assembly', checked_out: false,
+    })).toEqual({
+      operationRole: 'next', routingStepId: 'step-2', sequenceNumber: 20, routingStepName: 'Mill',
+      toolAssemblyId: 'tool-1', assemblyNumber: 'TA-001', toolName: 'Face mill',
+      toolDescription: 'Balanced assembly', checkedOut: false,
     })
   })
 })

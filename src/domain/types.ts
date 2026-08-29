@@ -76,6 +76,66 @@ export interface RoutingStep {
   notes: string
 }
 
+/**
+ * Tooling assigned to one operation on a released Work Order.
+ *
+ * These rows are Work Order facts, not routing-template defaults. Keeping them
+ * separate from RoutingStep makes that source boundary explicit for outputs
+ * such as the traveler.
+ */
+export interface WorkOrderOperationTool {
+  id: string
+  workOrderOperationId: string
+  toolAssemblyId: string
+  toolAssemblyNumber: string
+  toolAssemblyName: string
+  toolAssemblyDescription: string
+  toolNumber: string
+  sequenceNumber: number
+  notes: string
+  sourceRoutingOperationToolId: string | null
+}
+
+export interface RoutingOperationTool {
+  id: string
+  routingOperationId: string
+  toolAssemblyId: string
+  toolAssemblyNumber: string
+  toolAssemblyName: string
+  toolAssemblyDescription: string
+  toolNumber: string
+  sequenceNumber: number
+  notes: string
+}
+
+export interface ToolAssembly {
+  id: string
+  organizationId: string
+  assemblyNumber: string
+  name: string
+  description: string
+  quantityCheckedOut: number
+  quantityInUse: number
+  futureRequirements: number
+  usageWarning: boolean
+  imagePath: string | null
+  imageUrl: string | null
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ToolCheckoutTransaction {
+  id: string
+  organizationId: string
+  toolAssemblyId: string
+  transactionType: 'CHECK_OUT' | 'CHECK_IN'
+  note: string
+  actorId: string | null
+  actorDisplayName: string
+  createdAt: string
+}
+
 export interface RoutingTemplateStep {
   id: string
   routingTemplateId: string
@@ -83,6 +143,7 @@ export interface RoutingTemplateStep {
   routingStepName: string
   customerStageName: string
   workInstructions: string
+  tooling?: RoutingOperationTool[]
 }
 
 export interface RoutingTemplate {
@@ -120,6 +181,8 @@ export interface WorkOrder {
   archivedAt: string | null
   notes: string
   routing: RoutingStep[]
+  /** Work-order-specific assignments copied from, then independent of, routing defaults. */
+  operationTooling?: WorkOrderOperationTool[]
   /** Set-wise database summary for live manufacturer views. */
   stepMetrics?: StepMetrics[]
   /** Customer-safe aggregate supplied by the portal RPC; raw events stay internal. */
@@ -156,6 +219,19 @@ export interface ProductionStepSnapshot {
   scrapped: number
   nextStepId: string | null
   nextStepName: string | null
+  toolCheckoutRequirements: ProductionToolCheckoutRequirement[]
+}
+
+export interface ProductionToolCheckoutRequirement {
+  operationRole: 'current' | 'next'
+  routingStepId: string
+  sequenceNumber: number
+  routingStepName: string
+  toolAssemblyId: string
+  assemblyNumber: string
+  toolName: string
+  toolDescription: string
+  checkedOut: boolean
 }
 
 export interface Question {
@@ -185,6 +261,8 @@ export interface CustomerDocument {
 
 export interface ShopData {
   organization: Organization
+  toolAssemblies: ToolAssembly[]
+  toolCheckoutTransactions: ToolCheckoutTransaction[]
   routingTemplates: RoutingTemplate[]
   customers: Customer[]
   salesOrders: SalesOrder[]
@@ -197,6 +275,7 @@ export interface ShopData {
     customersHasMore: boolean
     salesOrdersHasMore: boolean
     workOrdersHasMore: boolean
+    toolsHasMore: boolean
     questionsHasMore: boolean
     documentsHasMore: boolean
   }

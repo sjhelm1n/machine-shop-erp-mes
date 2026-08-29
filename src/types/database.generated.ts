@@ -490,6 +490,71 @@ export type Database = {
           },
         ]
       }
+      routing_operation_tools: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string
+          organization_id: string
+          routing_operation_id: string
+          sequence_number: number
+          tool_assembly_id: string
+          tool_number: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string
+          organization_id: string
+          routing_operation_id: string
+          sequence_number: number
+          tool_assembly_id: string
+          tool_number: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string
+          organization_id?: string
+          routing_operation_id?: string
+          sequence_number?: number
+          tool_assembly_id?: string
+          tool_number?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routing_operation_tools_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "routing_operation_tools_routing_operation_id_fkey"
+            columns: ["routing_operation_id"]
+            isOneToOne: false
+            referencedRelation: "routing_template_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "routing_operation_tools_tool_assembly_id_organization_id_fkey"
+            columns: ["tool_assembly_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "tool_assemblies"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "routing_operation_tools_tool_assembly_id_organization_id_fkey"
+            columns: ["tool_assembly_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "tool_assembly_status"
+            referencedColumns: ["tool_assembly_id", "organization_id"]
+          },
+        ]
+      }
       routing_steps: {
         Row: {
           created_at: string
@@ -769,6 +834,110 @@ export type Database = {
           },
         ]
       }
+      tool_assemblies: {
+        Row: {
+          archived_at: string | null
+          assembly_number: string
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          image_path: string | null
+          notes: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          assembly_number: string
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          image_path?: string | null
+          notes?: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          assembly_number?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          image_path?: string | null
+          notes?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tool_assemblies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tool_checkout_transactions: {
+        Row: {
+          actor_display_name: string
+          actor_id: string | null
+          created_at: string
+          event_sequence: number
+          id: string
+          note: string
+          organization_id: string
+          request_hash: string
+          request_id: string
+          tool_assembly_id: string
+          transaction_type: string
+        }
+        Insert: {
+          actor_display_name: string
+          actor_id?: string | null
+          created_at?: string
+          event_sequence?: never
+          id?: string
+          note?: string
+          organization_id: string
+          request_hash: string
+          request_id: string
+          tool_assembly_id: string
+          transaction_type: string
+        }
+        Update: {
+          actor_display_name?: string
+          actor_id?: string | null
+          created_at?: string
+          event_sequence?: never
+          id?: string
+          note?: string
+          organization_id?: string
+          request_hash?: string
+          request_id?: string
+          tool_assembly_id?: string
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tool_checkout_transactions_tool_assembly_id_organization_i_fkey"
+            columns: ["tool_assembly_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "tool_assemblies"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "tool_checkout_transactions_tool_assembly_id_organization_i_fkey"
+            columns: ["tool_assembly_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "tool_assembly_status"
+            referencedColumns: ["tool_assembly_id", "organization_id"]
+          },
+        ]
+      }
       user_invitations: {
         Row: {
           cancelled_at: string | null
@@ -832,6 +1001,81 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_order_operation_tools: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string
+          organization_id: string
+          sequence_number: number
+          source_routing_operation_tool_id: string | null
+          tool_assembly_id: string
+          tool_number: string
+          updated_at: string
+          work_order_operation_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string
+          organization_id: string
+          sequence_number: number
+          source_routing_operation_tool_id?: string | null
+          tool_assembly_id: string
+          tool_number: string
+          updated_at?: string
+          work_order_operation_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string
+          organization_id?: string
+          sequence_number?: number
+          source_routing_operation_tool_id?: string | null
+          tool_assembly_id?: string
+          tool_number?: string
+          updated_at?: string
+          work_order_operation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_order_operation_tools_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_order_operation_tools_source_routing_operation_tool_i_fkey"
+            columns: ["source_routing_operation_tool_id"]
+            isOneToOne: false
+            referencedRelation: "routing_operation_tools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_order_operation_tools_tool_assembly_id_organization_i_fkey"
+            columns: ["tool_assembly_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "tool_assemblies"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_order_operation_tools_tool_assembly_id_organization_i_fkey"
+            columns: ["tool_assembly_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "tool_assembly_status"
+            referencedColumns: ["tool_assembly_id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_order_operation_tools_work_order_operation_id_fkey"
+            columns: ["work_order_operation_id"]
+            isOneToOne: false
+            referencedRelation: "routing_steps"
             referencedColumns: ["id"]
           },
         ]
@@ -934,7 +1178,25 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      tool_assembly_status: {
+        Row: {
+          future_requirements: number | null
+          organization_id: string | null
+          quantity_checked_out: number | null
+          quantity_in_use: number | null
+          tool_assembly_id: string | null
+          usage_warning: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tool_assemblies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       activate_my_profile: { Args: never; Returns: undefined }
@@ -1072,6 +1334,20 @@ export type Database = {
           work_order_name: string
         }[]
       }
+      production_tool_checkout_requirements: {
+        Args: { p_routing_step_id: string; p_work_order_id: string }
+        Returns: {
+          assembly_number: string
+          checked_out: boolean
+          operation_role: string
+          routing_step_id: string
+          routing_step_name: string
+          sequence_number: number
+          tool_assembly_id: string
+          tool_description: string
+          tool_name: string
+        }[]
+      }
       record_production_event: {
         Args: {
           p_event_type: string
@@ -1131,9 +1407,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      record_tool_checkout: {
+        Args: {
+          p_note: string
+          p_quantity: number
+          p_request_id: string
+          p_tool_assembly_id: string
+          p_transaction_type: string
+        }
+        Returns: string
+      }
       remove_user_access: { Args: { p_user_id: string }; Returns: string }
       reverse_production_event: {
         Args: { p_event_id: string }
+        Returns: undefined
+      }
+      save_routing_operation_tools: {
+        Args: { p_routing_operation_id: string; p_tools: Json }
         Returns: undefined
       }
       save_routing_template: {
@@ -1145,6 +1435,21 @@ export type Database = {
         }
         Returns: string
       }
+      save_tool_assembly: {
+        Args: {
+          p_assembly_number: string
+          p_description: string
+          p_notes: string
+          p_organization_id: string
+          p_quantity_owned: number
+          p_tool_assembly_id: string
+        }
+        Returns: string
+      }
+      save_work_order_operation_tools: {
+        Args: { p_tools: Json; p_work_order_operation_id: string }
+        Returns: undefined
+      }
       set_routing_template_archived: {
         Args: { p_archived: boolean; p_template_id: string }
         Returns: undefined
@@ -1155,6 +1460,14 @@ export type Database = {
       }
       set_sales_order_line_archived: {
         Args: { p_archived: boolean; p_line_id: string }
+        Returns: string
+      }
+      set_tool_assembly_archived: {
+        Args: { p_archived: boolean; p_tool_assembly_id: string }
+        Returns: undefined
+      }
+      set_tool_assembly_image: {
+        Args: { p_image_path: string; p_tool_assembly_id: string }
         Returns: string
       }
       set_work_order_archived: {

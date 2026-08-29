@@ -2,11 +2,31 @@ import { Archive, ArchiveRestore, ArrowLeft, Building2, CalendarDays, CheckCircl
 import { useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge, Button, EmptyState, Modal, PageHeader, ProgressBar } from '../components/Ui'
+import { ToolingEditor } from '../components/ToolingEditor'
 import { useShop } from '../context/ShopContext'
 import { customerStage, salesOrderCompletion, salesOrderProgress, workOrderProgress } from '../domain/routing'
 import { moveRoutingDraft } from '../domain/routingOrder'
+import type { ToolingDraft } from '../domain/tooling'
 import { formatDate, formatDateTime, money } from '../lib/format'
 import { useAuth } from '../context/AuthContext'
+
+interface WorkOrderRoutingDraft {
+  key: string
+  name: string
+  stage: string
+  instructions: string
+  tooling: ToolingDraft[]
+}
+
+const blankRoutingStep = (): WorkOrderRoutingDraft => ({ key: crypto.randomUUID(), name: '', stage: 'In production', instructions: '', tooling: [] })
+
+const copyTemplateStep = (step: NonNullable<ReturnType<typeof useShop>['data']>['routingTemplates'][number]['steps'][number]): WorkOrderRoutingDraft => ({
+  key: crypto.randomUUID(),
+  name: step.routingStepName,
+  stage: step.customerStageName,
+  instructions: step.workInstructions,
+  tooling: (step.tooling ?? []).map((tool) => ({ key: tool.id, toolAssemblyId: tool.toolAssemblyId, toolNumber: tool.toolNumber, notes: tool.notes, sourceRoutingOperationToolId: tool.id })),
+})
 
 export function SalesOrderDetailPage() {
   const { orderId } = useParams()
@@ -30,7 +50,7 @@ export function SalesOrderDetailPage() {
   const [routeDropKey, setRouteDropKey] = useState<string | null>(null)
   const manufacturedLines = data?.salesOrders.find((candidate) => candidate.id === orderId)?.lines.filter((line) => line.manufacturedItem && !line.archivedAt) ?? []
   const [workOrderForm, setWorkOrderForm] = useState({ workOrderName: '', lineId: '', quantity: '', dueDate: '', notes: '', routingTemplateId: '' })
-  const [routing, setRouting] = useState([{ key: crypto.randomUUID(), name: '', stage: 'In production', instructions: '' }])
+  const [routing, setRouting] = useState<WorkOrderRoutingDraft[]>([blankRoutingStep()])
   const order = data?.salesOrders.find((candidate) => candidate.id === orderId)
   if (!data || !order) return <main className="page"><EmptyState title="Order not found" body="It may have been removed or you may not have access." /></main>
   const workOrders = data.workOrders.filter((workOrder) => workOrder.salesOrderId === order.id)
@@ -130,13 +150,14 @@ export function SalesOrderDetailPage() {
   const loadRoutingTemplate = (templateId: string) => {
     const template = routingTemplates.find((candidate) => candidate.id === templateId)
     setWorkOrderForm((current) => ({ ...current, routingTemplateId: templateId }))
-    if (template) setRouting(template.steps.map((step) => ({ key: crypto.randomUUID(), name: step.routingStepName, stage: step.customerStageName, instructions: step.workInstructions })))
+    if (template) setRouting(template.steps.map(copyTemplateStep))
+    else setRouting([blankRoutingStep()])
   }
   const openWorkOrderForm = () => {
     const line = manufacturedLines[0]
     const template = routingTemplates[0]
     setWorkOrderForm({ workOrderName: '', lineId: line?.id ?? '', quantity: String(line?.quantity ?? ''), dueDate: order.orderDueDate, notes: '', routingTemplateId: template?.id ?? '' })
-    setRouting(template ? template.steps.map((step) => ({ key: crypto.randomUUID(), name: step.routingStepName, stage: step.customerStageName, instructions: step.workInstructions })) : [{ key: crypto.randomUUID(), name: '', stage: 'In production', instructions: '' }])
+    setRouting(template ? template.steps.map(copyTemplateStep) : [blankRoutingStep()])
     setError('')
     setWorkOrderOpen(true)
   }
@@ -173,7 +194,7 @@ export function SalesOrderDetailPage() {
     </form></Modal>}
     {workOrderOpen && profile?.role === 'manufacturer' && <Modal title="Create and release work order" onClose={() => setWorkOrderOpen(false)}><form className="entity-form work-order-form" onSubmit={async (event: FormEvent) => {
       event.preventDefault(); const line = manufacturedLines.find((candidate) => candidate.id === workOrderForm.lineId); if (!line?.partNumber) return; setBusy(true); setError('')
-      try { await addWorkOrder({ organizationId: order.organizationId, workOrderName: workOrderForm.workOrderName, salesOrderId: order.id, salesOrderLineItemId: line.id, partNumber: line.partNumber, quantityOrdered: Number(workOrderForm.quantity), dueDate: workOrderForm.dueDate, notes: workOrderForm.notes, routing: routing.map((step, index) => ({ sequenceNumber: (index + 1) * 10, name: step.name, customerStageName: step.stage, instructions: step.instructions })) }); setWorkOrderOpen(false) }
+      try { await addWorkOrder({ organizationId: order.organizationId, workOrderName: workOrderForm.workOrderName, salesOrderId: order.id, salesOrderLineItemId: line.id, partNumber: line.partNumber, quantityOrdered: Number(workOrderForm.quantity), dueDate: workOrderForm.dueDate, notes: workOrderForm.notes, routing: routing.map((step, index) => ({ sequenceNumber: (index + 1) * 10, name: step.name, customerStageName: step.stage, instructions: step.instructions, tooling: step.tooling.map((tool) => ({ sourceRoutingOperationToolId: tool.sourceRoutingOperationToolId ?? null, toolAssemblyId: tool.toolAssemblyId, toolNumber: tool.toolNumber, notes: tool.notes })) })) }); setWorkOrderOpen(false) }
       catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to create work order.') } finally { setBusy(false) }
     }}>
       <label>Work order name (optional)<input value={workOrderForm.workOrderName} onChange={(event) => setWorkOrderForm({ ...workOrderForm, workOrderName: event.target.value })} placeholder="Defaults to the generated order name" /></label>
@@ -183,7 +204,7 @@ export function SalesOrderDetailPage() {
       <label className="full">Traveler notes<input value={workOrderForm.notes} onChange={(event) => setWorkOrderForm({ ...workOrderForm, notes: event.target.value })} /></label>
       <label className="full">Routing template<select value={workOrderForm.routingTemplateId} onChange={(event) => loadRoutingTemplate(event.target.value)}><option value="">Custom routing</option>{routingTemplates.map((template) => <option value={template.id} key={template.id}>{template.templateName} · {template.steps.length} steps</option>)}</select></label>
       <p className="subtle full">Selecting a template copies its steps below. Any edits apply only to this new work order and do not change the template.</p>
-      <div className="form-section full"><header><div><strong>Routing</strong><span id="routing-order-help">Drag operations to reorder them. Arrow keys also work on the drag handle.</span></div><Button type="button" variant="secondary" onClick={() => setRouting((current) => [...current, { key: crypto.randomUUID(), name: '', stage: 'In production', instructions: '' }])}><Plus size={15} /> Add step</Button></header>{routing.map((step, index) => <div className={`route-editor${draggedRouteKey === step.key ? ' dragging' : ''}${routeDropKey === step.key && draggedRouteKey !== step.key ? ' drop-target' : ''}`} key={step.key} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setRouteDropKey(step.key) }} onDrop={(event) => dropRoute(event, step.key)}><button type="button" className="route-drag-handle" draggable aria-label={`Reorder ${step.name || `step ${index + 1}`}`} aria-describedby="routing-order-help" title="Drag to reorder; use Up or Down arrow keys for keyboard control" onDragStart={(event) => startRouteDrag(event, step.key)} onDragEnd={() => { setDraggedRouteKey(null); setRouteDropKey(null) }} onKeyDown={(event) => handleRouteOrderKey(event, step.key)}><GripVertical size={17} /></button><span className="route-sequence">{(index + 1) * 10}</span><label>Internal step<input value={step.name} onChange={(event) => setRouting((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, name: event.target.value } : candidate))} required /></label><label>Customer stage<input value={step.stage} onChange={(event) => setRouting((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, stage: event.target.value } : candidate))} required /></label><label className="instruction-field">Work instructions<textarea value={step.instructions} onChange={(event) => setRouting((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, instructions: event.target.value } : candidate))} /></label><button type="button" className="icon-button" aria-label={`Remove ${step.name || `step ${index + 1}`}`} disabled={routing.length === 1} onClick={() => setRouting((current) => current.filter((candidate) => candidate.key !== step.key))}><Trash2 size={16} /></button></div>)}</div>
+      <div className="form-section full"><header><div><strong>Routing</strong><span id="routing-order-help">Drag operations to reorder them. Arrow keys also work on the drag handle.</span></div><Button type="button" variant="secondary" onClick={() => setRouting((current) => [...current, blankRoutingStep()])}><Plus size={15} /> Add step</Button></header>{routing.map((step, index) => <div className={`route-editor${draggedRouteKey === step.key ? ' dragging' : ''}${routeDropKey === step.key && draggedRouteKey !== step.key ? ' drop-target' : ''}`} key={step.key} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setRouteDropKey(step.key) }} onDrop={(event) => dropRoute(event, step.key)}><button type="button" className="route-drag-handle" draggable aria-label={`Reorder ${step.name || `step ${index + 1}`}`} aria-describedby="routing-order-help" title="Drag to reorder; use Up or Down arrow keys for keyboard control" onDragStart={(event) => startRouteDrag(event, step.key)} onDragEnd={() => { setDraggedRouteKey(null); setRouteDropKey(null) }} onKeyDown={(event) => handleRouteOrderKey(event, step.key)}><GripVertical size={17} /></button><span className="route-sequence">{(index + 1) * 10}</span><label>Internal step<input value={step.name} onChange={(event) => setRouting((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, name: event.target.value } : candidate))} required /></label><label>Customer stage<input value={step.stage} onChange={(event) => setRouting((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, stage: event.target.value } : candidate))} required /></label><label className="instruction-field">Work instructions<textarea value={step.instructions} onChange={(event) => setRouting((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, instructions: event.target.value } : candidate))} /></label><div className="operation-tooling-editor"><ToolingEditor idPrefix={`work-order-create-${step.key}`} rows={step.tooling} toolAssemblies={data.toolAssemblies} onChange={(tooling) => setRouting((current) => current.map((candidate) => candidate.key === step.key ? { ...candidate, tooling } : candidate))} /></div><button type="button" className="icon-button" aria-label={`Remove ${step.name || `step ${index + 1}`}`} disabled={routing.length === 1} onClick={() => setRouting((current) => current.filter((candidate) => candidate.key !== step.key))}><Trash2 size={16} /></button></div>)}</div>
       {error && <p className="form-error full">{error}</p>}<div className="form-actions full"><Button type="button" variant="ghost" onClick={() => setWorkOrderOpen(false)}>Cancel</Button><Button disabled={busy}>{busy ? 'Releasing…' : 'Create and release'}</Button></div>
     </form></Modal>}
   </main>

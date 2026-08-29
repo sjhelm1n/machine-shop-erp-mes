@@ -1,7 +1,9 @@
 import type { AppRole, CustomerDocument, PricingType, ProductionEvent, ProductionStepSnapshot, Question, ShopData, StepMetrics } from '../domain/types'
-import { parseProductionEvent, parseProductionStepSnapshot } from '../domain/databaseValidation'
+import { normalizeToolNumber, type ToolingDraft } from '../domain/tooling'
+import { parseProductionEvent, parseProductionStepSnapshot, parseProductionToolCheckoutRequirement } from '../domain/databaseValidation'
 import { parseDashboardMetrics, parseProductionCompleteOpenOrders, type DashboardMetrics, type DashboardRange, type ProductionCompleteOpenOrder } from '../domain/dashboard'
 import { validateDocumentPdf } from '../domain/documentSecurity'
+import { validateToolAssemblyImage } from '../domain/toolImageSecurity'
 import { normalizeEmailDomain } from '../domain/userManagement'
 import { requireSupabase } from '../lib/supabase'
 import type { Database, Tables } from '../types/database.generated'
@@ -58,7 +60,7 @@ function senderType(value: string): AppRole {
 export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): Promise<ShopData> {
   if (role === 'customer') return loadCustomerPortalData(limit)
   const client = requireSupabase()
-  const [organization, templatesResult, customersResult, salesOrdersResult, workOrdersResult, questionsResult, documentsResult] = await Promise.all([
+  const [organization, templatesResult, customersResult, salesOrdersResult, workOrdersResult, questionsResult, documentsResult, toolsResult, checkoutResult] = await Promise.all([
     client.from('organizations').select('id, name, plant_timezone').single(),
     client.from('routing_templates').select('id, organization_id, template_name, archived_at').order('template_name').order('id'),
     client.from('customers').select('id, organization_id, customer_name, logo_url, portal_email_domain, primary_address, default_ship_to_address, default_bill_to_address').order('customer_name').order('id').limit(limit + 1),
@@ -66,8 +68,10 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
     client.from('work_orders').select('id, organization_id, work_order_number, work_order_name, sales_order_id, sales_order_line_item_id, part_number, quantity_ordered, due_date, released_at, completion_date, archived_at, notes').order('due_date').order('id').limit(limit + 1),
     client.from('customer_messages').select('id, organization_id, customer_id, sales_order_id, sender_type, sender_display_name, message, created_at, read_at').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
     client.from('customer_documents').select('id, organization_id, customer_id, sales_order_id, document_type, document_name, document_date, amount, file_path, uploaded_at').order('document_date', { ascending: false }).order('id', { ascending: false }).limit(limit + 1),
+    client.from('tool_assemblies').select('id, organization_id, assembly_number, description, notes, image_path, archived_at, created_at, updated_at').order('assembly_number').order('id').limit(limit + 1),
+    client.from('tool_checkout_transactions').select('id, organization_id, tool_assembly_id, transaction_type, note, actor_id, actor_display_name, created_at').order('event_sequence', { ascending: false }).limit(250),
   ])
-  const firstError = [organization, templatesResult, customersResult, salesOrdersResult, workOrdersResult, questionsResult, documentsResult].find((result) => result.error)?.error
+  const firstError = [organization, templatesResult, customersResult, salesOrdersResult, workOrdersResult, questionsResult, documentsResult, toolsResult, checkoutResult].find((result) => result.error)?.error
   if (firstError) throw firstError
   if (!organization.data) throw new Error('No accessible organization was found for this user.')
 
@@ -76,6 +80,7 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
   const workOrders = bounded(workOrdersResult.data, limit)
   const questions = bounded(questionsResult.data, limit)
   const documents = bounded(documentsResult.data, limit)
+  const tools = bounded(toolsResult.data, limit)
   const salesOrderIds = salesOrders.rows.map((row) => row.id)
   const workOrderIds = workOrders.rows.map((row) => row.id)
   const routingTemplateIds = (templatesResult.data ?? []).map((row) => row.id)
@@ -96,10 +101,49 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
   const dependencyError = [linesResult, routingResult, metricsResult, templateStepsResult].find((result) => result.error)?.error
   if (dependencyError) throw dependencyError
 
+  const routingOperationIds = (templateStepsResult.data ?? []).map((row) => row.id)
+  const workOrderOperationIds = (routingResult.data ?? []).map((row) => row.id)
+  const [routingToolsResult, workOrderToolsResult] = await Promise.all([
+    routingOperationIds.length
+      ? client.from('routing_operation_tools').select('id, routing_operation_id, tool_assembly_id, tool_number, notes, sequence_number').in('routing_operation_id', routingOperationIds).order('routing_operation_id').order('sequence_number').order('id')
+      : Promise.resolve({ data: [], error: null }),
+    workOrderOperationIds.length
+      ? client.from('work_order_operation_tools').select('id, work_order_operation_id, tool_assembly_id, tool_number, notes, sequence_number, source_routing_operation_tool_id').in('work_order_operation_id', workOrderOperationIds).order('work_order_operation_id').order('sequence_number').order('id')
+      : Promise.resolve({ data: [], error: null }),
+  ])
+  const toolingError = [routingToolsResult, workOrderToolsResult].find((result) => result.error)?.error
+  if (toolingError) throw toolingError
+
+  const referencedToolIds = [...new Set([
+    ...(routingToolsResult.data ?? []).map((assignment) => assignment.tool_assembly_id),
+    ...(workOrderToolsResult.data ?? []).map((assignment) => assignment.tool_assembly_id),
+  ])]
+  const loadedToolIds = new Set((toolsResult.data ?? []).map((tool) => tool.id))
+  const missingToolIds = referencedToolIds.filter((id) => !loadedToolIds.has(id))
+  const missingToolResults = await Promise.all(Array.from({ length: Math.ceil(missingToolIds.length / 100) }, (_, index) =>
+    client.from('tool_assemblies').select('id, organization_id, assembly_number, description, notes, image_path, archived_at, created_at, updated_at').in('id', missingToolIds.slice(index * 100, (index + 1) * 100))))
+  const missingToolError = missingToolResults.find((result) => result.error)?.error
+  if (missingToolError) throw missingToolError
+  const displayedToolIds = tools.rows.map((tool) => tool.id)
+  const toolStatusResult = displayedToolIds.length
+    ? await client.from('tool_assembly_status').select('tool_assembly_id, organization_id, quantity_checked_out, quantity_in_use, future_requirements, usage_warning').in('tool_assembly_id', displayedToolIds)
+    : { data: [], error: null }
+  if (toolStatusResult.error) throw toolStatusResult.error
+  const imagePaths = tools.rows.flatMap((tool) => tool.image_path ? [tool.image_path] : [])
+  const imageUrlsResult = imagePaths.length
+    ? await client.storage.from('tool-assembly-images').createSignedUrls(imagePaths, 60 * 60 * 24)
+    : { data: [], error: null }
+  if (imageUrlsResult.error) throw imageUrlsResult.error
+
   const linesByOrder = groupedBy(linesResult.data ?? [], (row) => row.sales_order_id)
   const routingByWorkOrder = groupedBy(routingResult.data ?? [], (row) => row.work_order_id)
   const stepsByTemplate = groupedBy(templateStepsResult.data ?? [], (row) => row.routing_template_id)
   const metricsByWorkOrder = groupedBy(metricsResult.data as WorkOrderStepMetricRow[] | null ?? [], (row) => row.work_order_id)
+  const routingToolsByOperation = groupedBy(routingToolsResult.data ?? [], (row) => row.routing_operation_id)
+  const workOrderToolsByOperation = groupedBy(workOrderToolsResult.data ?? [], (row) => row.work_order_operation_id)
+  const toolsById = new Map([...(toolsResult.data ?? []), ...missingToolResults.flatMap((result) => result.data ?? [])].map((tool) => [tool.id, tool]))
+  const statusByTool = new Map((toolStatusResult.data ?? []).map((status) => [status.tool_assembly_id, status]))
+  const imageUrlByPath = new Map((imageUrlsResult.data ?? []).flatMap((image) => image.signedUrl ? [[image.path, image.signedUrl] as const] : []))
   const mapMetric = (row: WorkOrderStepMetricRow): StepMetrics => ({
     stepId: row.step_id,
     entered: row.entered,
@@ -113,14 +157,19 @@ export async function loadShopData(role: AppRole, limit = DEFAULT_DATA_LIMIT): P
   })
   return {
     organization: { id: organization.data.id, name: organization.data.name, plantTimezone: organization.data.plant_timezone },
-    routingTemplates: (templatesResult.data ?? []).map((template) => ({ id: template.id, organizationId: template.organization_id, templateName: template.template_name, archivedAt: template.archived_at, steps: (stepsByTemplate.get(template.id) ?? []).map((step) => ({ id: step.id, routingTemplateId: step.routing_template_id, sequenceNumber: step.sequence_number, routingStepName: step.routing_step_name, customerStageName: step.customer_stage_name, workInstructions: step.work_instructions })) })),
+    toolAssemblies: tools.rows.map((tool) => {
+      const status = statusByTool.get(tool.id)
+      return { id: tool.id, organizationId: tool.organization_id, assemblyNumber: tool.assembly_number, name: tool.description, description: tool.notes, quantityCheckedOut: status?.quantity_checked_out ?? 0, quantityInUse: status?.quantity_in_use ?? 0, futureRequirements: status?.future_requirements ?? 0, usageWarning: status?.usage_warning ?? false, imagePath: tool.image_path, imageUrl: tool.image_path ? imageUrlByPath.get(tool.image_path) ?? null : null, archivedAt: tool.archived_at, createdAt: tool.created_at, updatedAt: tool.updated_at }
+    }),
+    toolCheckoutTransactions: (checkoutResult.data ?? []).map((row) => ({ id: row.id, organizationId: row.organization_id, toolAssemblyId: row.tool_assembly_id, transactionType: row.transaction_type === 'CHECK_IN' ? 'CHECK_IN' : 'CHECK_OUT', note: row.note, actorId: row.actor_id, actorDisplayName: row.actor_display_name, createdAt: row.created_at })),
+    routingTemplates: (templatesResult.data ?? []).map((template) => ({ id: template.id, organizationId: template.organization_id, templateName: template.template_name, archivedAt: template.archived_at, steps: (stepsByTemplate.get(template.id) ?? []).map((step) => ({ id: step.id, routingTemplateId: step.routing_template_id, sequenceNumber: step.sequence_number, routingStepName: step.routing_step_name, customerStageName: step.customer_stage_name, workInstructions: step.work_instructions, tooling: (routingToolsByOperation.get(step.id) ?? []).map((assignment) => { const tool = toolsById.get(assignment.tool_assembly_id); return { id: assignment.id, routingOperationId: assignment.routing_operation_id, toolAssemblyId: assignment.tool_assembly_id, toolAssemblyNumber: tool?.assembly_number ?? 'Unknown tool', toolAssemblyName: tool?.description ?? 'Tool assembly unavailable', toolAssemblyDescription: tool?.notes ?? '', toolNumber: assignment.tool_number, sequenceNumber: assignment.sequence_number, notes: assignment.notes } }) })) })),
     customers: customers.rows.map((row) => ({ id: row.id, organizationId: row.organization_id, customerName: row.customer_name, logoUrl: row.logo_url, emailDomain: row.portal_email_domain, primaryAddress: row.primary_address, defaultShipToAddress: row.default_ship_to_address, defaultBillToAddress: row.default_bill_to_address })),
     salesOrders: salesOrders.rows.map((row) => ({ id: row.id, organizationId: row.organization_id, salesOrderNumber: row.sales_order_number, salesOrderName: row.sales_order_name, customerId: row.customer_id, customerName: row.customer_name, customerAddress: row.customer_address, customerPoNumber: row.customer_po_number, shipToAddress: row.ship_to_address, billToAddress: row.bill_to_address, dateReceived: row.date_received, orderDueDate: row.order_due_date, shippedAt: row.shipped_at, invoicedAt: row.invoiced_at, archivedAt: row.archived_at, notes: row.notes, lines: (linesByOrder.get(row.id) ?? []).map((line) => ({ id: line.id, salesOrderId: line.sales_order_id, lineNumber: line.line_number, partNumber: line.part_number, description: line.description, manufacturedItem: line.manufactured_item, pricingType: pricingType(line.pricing_type), quantity: line.quantity, unitPrice: line.unit_price, flatRateAmount: line.flat_rate_amount, lineTotal: line.line_total ?? 0, sortOrder: line.sort_order, archivedAt: line.archived_at })) })),
-    workOrders: workOrders.rows.map((row) => ({ id: row.id, organizationId: row.organization_id, workOrderNumber: row.work_order_number, workOrderName: row.work_order_name, salesOrderId: row.sales_order_id, salesOrderLineItemId: row.sales_order_line_item_id, partNumber: row.part_number, quantityOrdered: row.quantity_ordered, dueDate: row.due_date, releasedAt: row.released_at, completionDate: row.completion_date, archivedAt: row.archived_at, notes: row.notes, routing: (routingByWorkOrder.get(row.id) ?? []).map((step) => ({ id: step.id, workOrderId: step.work_order_id, sequenceNumber: step.sequence_number, routingStepName: step.routing_step_name, customerStageName: step.customer_stage_name, workInstructions: step.work_instructions, notes: step.notes })), stepMetrics: (metricsByWorkOrder.get(row.id) ?? []).map(mapMetric) })),
+    workOrders: workOrders.rows.map((row) => ({ id: row.id, organizationId: row.organization_id, workOrderNumber: row.work_order_number, workOrderName: row.work_order_name, salesOrderId: row.sales_order_id, salesOrderLineItemId: row.sales_order_line_item_id, partNumber: row.part_number, quantityOrdered: row.quantity_ordered, dueDate: row.due_date, releasedAt: row.released_at, completionDate: row.completion_date, archivedAt: row.archived_at, notes: row.notes, routing: (routingByWorkOrder.get(row.id) ?? []).map((step) => ({ id: step.id, workOrderId: step.work_order_id, sequenceNumber: step.sequence_number, routingStepName: step.routing_step_name, customerStageName: step.customer_stage_name, workInstructions: step.work_instructions, notes: step.notes })), operationTooling: (routingByWorkOrder.get(row.id) ?? []).flatMap((step) => (workOrderToolsByOperation.get(step.id) ?? []).map((assignment) => { const tool = toolsById.get(assignment.tool_assembly_id); return { id: assignment.id, workOrderOperationId: assignment.work_order_operation_id, toolAssemblyId: assignment.tool_assembly_id, toolAssemblyNumber: tool?.assembly_number ?? 'Unknown tool', toolAssemblyName: tool?.description ?? 'Tool assembly unavailable', toolAssemblyDescription: tool?.notes ?? '', toolNumber: assignment.tool_number, sequenceNumber: assignment.sequence_number, notes: assignment.notes, sourceRoutingOperationToolId: assignment.source_routing_operation_tool_id } })), stepMetrics: (metricsByWorkOrder.get(row.id) ?? []).map(mapMetric) })),
     productionEvents: [],
     questions: [...questions.rows].reverse().map((row) => ({ id: row.id, organizationId: row.organization_id, customerId: row.customer_id, salesOrderId: row.sales_order_id, senderType: senderType(row.sender_type), senderName: row.sender_display_name, message: row.message, createdAt: row.created_at, readAt: row.read_at })),
     documents: documents.rows.map(mapCustomerDocument),
-    pageInfo: { limit, customersHasMore: customers.hasMore, salesOrdersHasMore: salesOrders.hasMore, workOrdersHasMore: workOrders.hasMore, questionsHasMore: questions.hasMore, documentsHasMore: documents.hasMore },
+    pageInfo: { limit, customersHasMore: customers.hasMore, salesOrdersHasMore: salesOrders.hasMore, workOrdersHasMore: workOrders.hasMore, questionsHasMore: questions.hasMore, documentsHasMore: documents.hasMore, toolsHasMore: tools.hasMore },
   }
 }
 
@@ -145,6 +194,8 @@ async function loadCustomerPortalData(limit: number): Promise<ShopData> {
   const documentPage = bounded(documents.data, limit)
   return {
     organization: { id: organization.data.id, name: organization.data.name, plantTimezone: organization.data.plant_timezone },
+    toolAssemblies: [],
+    toolCheckoutTransactions: [],
     routingTemplates: [],
     customers: customers.data ? [{
       id: String(customers.data.id),
@@ -211,17 +262,23 @@ async function loadCustomerPortalData(limit: number): Promise<ShopData> {
     productionEvents: [],
     questions: [...questionPage.rows].reverse().map((row) => ({ id: row.id, organizationId: row.organization_id, customerId: row.customer_id, salesOrderId: row.sales_order_id, senderType: senderType(row.sender_type), senderName: row.sender_display_name, message: row.message, createdAt: row.created_at, readAt: row.read_at })),
     documents: documentPage.rows.map(mapCustomerDocument),
-    pageInfo: { limit, customersHasMore: false, salesOrdersHasMore: false, workOrdersHasMore: false, questionsHasMore: questionPage.hasMore, documentsHasMore: documentPage.hasMore },
+    pageInfo: { limit, customersHasMore: false, salesOrdersHasMore: false, workOrdersHasMore: false, questionsHasMore: questionPage.hasMore, documentsHasMore: documentPage.hasMore, toolsHasMore: false },
   }
 }
 
 export async function loadProductionStep(workOrderId: string, routingStepId: string): Promise<ProductionStepSnapshot> {
-  const { data, error } = await requireSupabase().rpc('production_step_snapshot', {
-    p_work_order_id: workOrderId,
-    p_routing_step_id: routingStepId,
-  }).single()
-  if (error) throw error
-  return parseProductionStepSnapshot(data)
+  const client = requireSupabase()
+  const args = { p_work_order_id: workOrderId, p_routing_step_id: routingStepId }
+  const [snapshotResult, toolingResult] = await Promise.all([
+    client.rpc('production_step_snapshot', args).single(),
+    client.rpc('production_tool_checkout_requirements', args),
+  ])
+  if (snapshotResult.error) throw snapshotResult.error
+  if (toolingResult.error) throw toolingResult.error
+  return {
+    ...parseProductionStepSnapshot(snapshotResult.data),
+    toolCheckoutRequirements: (toolingResult.data ?? []).map(parseProductionToolCheckoutRequirement),
+  }
 }
 
 export async function loadDashboardMetrics(range: DashboardRange): Promise<DashboardMetrics> {
@@ -340,7 +397,7 @@ export interface WorkOrderInput {
   quantityOrdered: number
   dueDate: string
   notes: string
-  routing: Array<{ sequenceNumber: number; name: string; customerStageName: string; instructions: string }>
+  routing: Array<{ sequenceNumber: number; name: string; customerStageName: string; instructions: string; tooling?: Array<{ sourceRoutingOperationToolId: string | null; toolAssemblyId: string; toolNumber: string; notes: string }> }>
 }
 
 export interface WorkOrderUpdateInput {
@@ -354,7 +411,14 @@ export interface RoutingTemplateInput {
   id: string
   organizationId: string
   templateName: string
-  steps: Array<{ name: string; customerStageName: string; instructions: string }>
+  steps: Array<{ name: string; customerStageName: string; instructions: string; tooling?: ToolingDraft[] }>
+}
+
+export interface ToolAssemblyInput {
+  id: string
+  organizationId: string
+  name: string
+  description: string
 }
 
 export async function createCustomer(input: CustomerInput): Promise<void> {
@@ -458,7 +522,7 @@ export async function markSalesOrderMilestone(salesOrderId: string, milestone: '
 export async function createWorkOrder(input: WorkOrderInput, requestId: string): Promise<void> {
   const { error } = await requireSupabase().rpc('create_work_order', {
     p_work_order: { organization_id: input.organizationId, request_id: requestId, work_order_name: input.workOrderName.trim() || null, sales_order_id: input.salesOrderId, sales_order_line_item_id: input.salesOrderLineItemId, part_number: input.partNumber, quantity_ordered: input.quantityOrdered, due_date: input.dueDate, notes: input.notes },
-    p_routing: input.routing.map((step) => ({ sequence_number: step.sequenceNumber, routing_step_name: step.name, customer_stage_name: step.customerStageName, work_instructions: step.instructions })),
+    p_routing: input.routing.map((step) => ({ sequence_number: step.sequenceNumber, routing_step_name: step.name, customer_stage_name: step.customerStageName, work_instructions: step.instructions, tooling: (step.tooling ?? []).map((tool) => ({ tool_assembly_id: tool.toolAssemblyId, tool_number: normalizeToolNumber(tool.toolNumber), notes: tool.notes, source_routing_operation_tool_id: tool.sourceRoutingOperationToolId })) })),
   })
   if (error) throw error
 }
@@ -478,12 +542,82 @@ export async function saveRoutingTemplate(input: RoutingTemplateInput): Promise<
     p_template_id: input.id,
     p_organization_id: input.organizationId,
     p_template_name: input.templateName,
-    p_steps: input.steps.map((step) => ({ routing_step_name: step.name, customer_stage_name: step.customerStageName, work_instructions: step.instructions })),
+    p_steps: input.steps.map((step) => ({ routing_step_name: step.name, customer_stage_name: step.customerStageName, work_instructions: step.instructions, tooling: (step.tooling ?? []).map((tool) => ({ tool_assembly_id: tool.toolAssemblyId, tool_number: normalizeToolNumber(tool.toolNumber), notes: tool.notes })) })),
   })
   if (error) throw error
 }
 
 export async function setRoutingTemplateArchived(templateId: string, archived: boolean): Promise<void> {
   const { error } = await requireSupabase().rpc('set_routing_template_archived', { p_template_id: templateId, p_archived: archived })
+  if (error) throw error
+}
+
+export async function saveToolAssembly(input: ToolAssemblyInput): Promise<string> {
+  const { data, error } = await requireSupabase().rpc('save_tool_assembly', {
+    p_tool_assembly_id: input.id,
+    p_organization_id: input.organizationId,
+    // Retained by the RPC for compatibility; PostgreSQL owns the generated ID.
+    p_assembly_number: '',
+    p_description: input.name,
+    p_quantity_owned: 1,
+    p_notes: input.description,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function setToolAssemblyArchived(toolAssemblyId: string, archived: boolean): Promise<void> {
+  const { error } = await requireSupabase().rpc('set_tool_assembly_archived', { p_tool_assembly_id: toolAssemblyId, p_archived: archived })
+  if (error) throw error
+}
+
+export async function uploadToolAssemblyImage(input: { toolAssemblyId: string; organizationId: string; file: File }): Promise<void> {
+  const image = await validateToolAssemblyImage(input.file)
+  const client = requireSupabase()
+  const imagePath = `${input.organizationId}/${input.toolAssemblyId}/${crypto.randomUUID()}.${image.extension}`
+  const bucket = client.storage.from('tool-assembly-images')
+  const uploaded = await bucket.upload(imagePath, input.file, { contentType: image.contentType, upsert: false })
+  if (uploaded.error) throw uploaded.error
+
+  const imageArgs = { p_tool_assembly_id: input.toolAssemblyId, p_image_path: imagePath }
+  const saved = await client.rpc('set_tool_assembly_image', imageArgs)
+  if (saved.error) {
+    await bucket.remove([imagePath])
+    throw saved.error
+  }
+  if (saved.data && saved.data !== imagePath) {
+    const removed = await bucket.remove([saved.data])
+    if (removed.error) throw new Error(`The new image was saved, but the previous image could not be removed: ${removed.error.message}`)
+  }
+}
+
+export async function removeToolAssemblyImage(toolAssemblyId: string, currentImagePath: string | null): Promise<void> {
+  const client = requireSupabase()
+  const imageArgs = { p_tool_assembly_id: toolAssemblyId, p_image_path: null } as unknown as Database['public']['Functions']['set_tool_assembly_image']['Args']
+  const saved = await client.rpc('set_tool_assembly_image', imageArgs)
+  if (saved.error) throw saved.error
+  const pathToRemove = saved.data ?? currentImagePath
+  if (!pathToRemove) return
+  const removed = await client.storage.from('tool-assembly-images').remove([pathToRemove])
+  if (removed.error) throw new Error(`The image was removed from the tool assembly, but its stored file could not be deleted: ${removed.error.message}`)
+}
+
+export async function recordToolCheckout(input: { toolAssemblyId: string; transactionType: 'CHECK_OUT' | 'CHECK_IN'; note: string; requestId: string }): Promise<string> {
+  const { data, error } = await requireSupabase().rpc('record_tool_checkout', {
+    p_tool_assembly_id: input.toolAssemblyId,
+    p_transaction_type: input.transactionType,
+    p_quantity: 1,
+    p_note: input.note,
+    p_request_id: input.requestId,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function saveWorkOrderOperationTools(operationId: string, tooling: ToolingDraft[]): Promise<void> {
+  const { error } = await requireSupabase().rpc('save_work_order_operation_tools', {
+    p_work_order_operation_id: operationId,
+    p_tools: tooling.map((tool) => ({ id: tool.key, tool_assembly_id: tool.toolAssemblyId, tool_number: normalizeToolNumber(tool.toolNumber), notes: tool.notes, source_routing_operation_tool_id: tool.sourceRoutingOperationToolId ?? null })),
+  })
   if (error) throw error
 }

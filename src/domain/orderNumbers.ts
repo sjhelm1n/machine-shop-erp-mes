@@ -9,3 +9,14 @@ export function nextChronologicalNumber(numbers: string[], minimumWidth: number)
 
   return String(highest + 1).padStart(minimumWidth, '0')
 }
+
+export function nextPrefixedChronologicalNumber(numbers: string[], prefix: string, minimumWidth: number): string {
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`^${escapedPrefix}(\\d+)$`)
+  const numericPortions = numbers.flatMap((value) => {
+    const match = value.trim().match(pattern)
+    return match ? [match[1]] : []
+  })
+
+  return `${prefix}${nextChronologicalNumber(numericPortions, minimumWidth)}`
+}

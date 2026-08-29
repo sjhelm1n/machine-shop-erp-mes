@@ -1,14 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { demoData } from '../data/demoData'
-import type { ProductionEvent, Question, ShopData } from '../domain/types'
+import type { ProductionEvent, Question, ShopData, ToolAssembly } from '../domain/types'
 import { calculateStepMetrics } from '../domain/routing'
-import { nextChronologicalNumber } from '../domain/orderNumbers'
+import { nextChronologicalNumber, nextPrefixedChronologicalNumber } from '../domain/orderNumbers'
 import { appendQuestionReply, plainTextQuestionMessage, salesOrderConversationLifecycle } from '../domain/questions'
 import { normalizeEmailDomain } from '../domain/userManagement'
+import { checkedOutQuantity, deriveToolUsage, normalizeToolNumber, operationCheckoutError, validateCheckoutTransaction, validateToolingDraft, type ToolingDraft } from '../domain/tooling'
+import { validateToolAssemblyImage } from '../domain/toolImageSecurity'
 import { env } from '../lib/env'
 import { calendarDateInTimeZone } from '../lib/format'
-import { addSalesOrderLine as addSalesOrderLineRecord, createCustomer, createSalesOrder, createWorkOrder, loadShopData, markSalesOrderMilestone, recordProductionAdjustment, recordProductionEvent, reverseProductionEvent, saveRoutingTemplate as saveRoutingTemplateRecord, sendQuestion, setRoutingTemplateArchived as setRoutingTemplateArchivedRecord, setSalesOrderArchived as setSalesOrderArchivedRecord, setSalesOrderLineArchived as setSalesOrderLineArchivedRecord, setWorkOrderArchived as setWorkOrderArchivedRecord, updateCustomer, updateSalesOrderLine, updateWorkOrder as updateWorkOrderRecord, type CustomerInput, type RoutingTemplateInput, type SalesOrderInput, type SalesOrderLineInput, type WorkOrderInput, type WorkOrderUpdateInput } from '../services/shopService'
+import { addSalesOrderLine as addSalesOrderLineRecord, createCustomer, createSalesOrder, createWorkOrder, loadShopData, markSalesOrderMilestone, recordProductionAdjustment, recordProductionEvent, recordToolCheckout as recordToolCheckoutRecord, removeToolAssemblyImage as removeToolAssemblyImageRecord, reverseProductionEvent, saveRoutingTemplate as saveRoutingTemplateRecord, saveToolAssembly as saveToolAssemblyRecord, saveWorkOrderOperationTools as saveWorkOrderOperationToolsRecord, sendQuestion, setRoutingTemplateArchived as setRoutingTemplateArchivedRecord, setSalesOrderArchived as setSalesOrderArchivedRecord, setSalesOrderLineArchived as setSalesOrderLineArchivedRecord, setToolAssemblyArchived as setToolAssemblyArchivedRecord, setWorkOrderArchived as setWorkOrderArchivedRecord, updateCustomer, updateSalesOrderLine, updateWorkOrder as updateWorkOrderRecord, uploadToolAssemblyImage as uploadToolAssemblyImageRecord, type CustomerInput, type RoutingTemplateInput, type SalesOrderInput, type SalesOrderLineInput, type ToolAssemblyInput, type WorkOrderInput, type WorkOrderUpdateInput } from '../services/shopService'
 import { useAuth } from './AuthContext'
 
 interface ShopValue {
@@ -36,13 +38,28 @@ interface ShopValue {
   setRoutingTemplateArchived: (templateId: string, archived: boolean) => Promise<void>
   addWorkOrder: (input: WorkOrderInput) => Promise<void>
   addProductionAdjustment: (input: { workOrderId: string; routingStepId: string; quantity: number }) => Promise<void>
+  saveToolAssembly: (input: ToolAssemblyInput) => Promise<void>
+  uploadToolAssemblyImage: (toolAssemblyId: string, organizationId: string, file: File) => Promise<void>
+  removeToolAssemblyImage: (toolAssemblyId: string, currentImagePath: string | null) => Promise<void>
+  setToolAssemblyArchived: (toolAssemblyId: string, archived: boolean) => Promise<void>
+  recordToolCheckout: (input: { toolAssemblyId: string; transactionType: 'CHECK_OUT' | 'CHECK_IN'; note: string }) => Promise<void>
+  saveWorkOrderOperationTools: (operationId: string, tooling: ToolingDraft[]) => Promise<void>
   clearNotice: () => void
 }
 
 const ShopContext = createContext<ShopValue | null>(null)
 
+function readImageAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener('load', () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Unable to read the selected image.')))
+    reader.addEventListener('error', () => reject(new Error('Unable to read the selected image.')))
+    reader.readAsDataURL(file)
+  })
+}
+
 function updateDemoCompletions(current: ShopData, productionEvents: ProductionEvent[]): ShopData {
-  return {
+  return refreshDemoToolStatus({
     ...current,
     productionEvents,
     workOrders: current.workOrders.map((workOrder) => {
@@ -51,6 +68,28 @@ function updateDemoCompletions(current: ShopData, productionEvents: ProductionEv
       const complete = metrics.length > 0 && metrics.every((metric) => metric.available === 0) && (final?.transferred ?? 0) >= workOrder.quantityOrdered
       return { ...workOrder, completionDate: complete ? workOrder.completionDate ?? calendarDateInTimeZone(current.organization.plantTimezone) : null }
     }),
+  })
+}
+
+function refreshDemoToolStatus(current: ShopData): ShopData {
+  const usage = deriveToolUsage(current.workOrders, current.productionEvents)
+  return {
+    ...current,
+    toolAssemblies: current.toolAssemblies.map((tool) => {
+      const toolUsage = usage.get(tool.id) ?? { active: 0, future: 0 }
+      return { ...tool, quantityCheckedOut: checkedOutQuantity(current.toolCheckoutTransactions, tool.id), quantityInUse: toolUsage.active, futureRequirements: toolUsage.future, usageWarning: toolUsage.active > 1 }
+    }),
+  }
+}
+
+function refreshDemoToolMasterReferences(current: ShopData, saved: ToolAssembly): ShopData {
+  const applyMasterValues = <T extends { toolAssemblyId: string; toolAssemblyNumber: string; toolAssemblyName: string; toolAssemblyDescription: string }>(tool: T): T => tool.toolAssemblyId === saved.id
+    ? { ...tool, toolAssemblyNumber: saved.assemblyNumber, toolAssemblyName: saved.name, toolAssemblyDescription: saved.description }
+    : tool
+  return {
+    ...current,
+    routingTemplates: current.routingTemplates.map((template) => ({ ...template, steps: template.steps.map((step) => ({ ...step, tooling: step.tooling?.map(applyMasterValues) })) })),
+    workOrders: current.workOrders.map((workOrder) => ({ ...workOrder, operationTooling: workOrder.operationTooling?.map(applyMasterValues) })),
   }
 }
 
@@ -61,7 +100,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const profileRole = profile?.role ?? null
   const profileScope = profile ? `${profile.id}:${profile.organizationId}:${profile.customerId ?? ''}:${profile.role}` : null
   const productionRoute = pathname.startsWith('/produce/')
-  const [data, setData] = useState<ShopData | null>(env.demoMode ? structuredClone(demoData) : null)
+  const [data, setData] = useState<ShopData | null>(env.demoMode ? refreshDemoToolStatus(structuredClone(demoData)) : null)
   const [loading, setLoading] = useState(!env.demoMode)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -138,9 +177,13 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 
   const transact: ShopValue['transact'] = async (input) => {
     if (!data || !profile) return
-    if (data.workOrders.find((workOrder) => workOrder.id === input.workOrderId)?.archivedAt) throw new Error('Restore the work order before recording production.')
+    const workOrder = data.workOrders.find((candidate) => candidate.id === input.workOrderId)
+    if (workOrder?.archivedAt) throw new Error('Restore the work order before recording production.')
     if (!Number.isInteger(input.quantity) || input.quantity <= 0) throw new Error('Enter a whole quantity greater than zero.')
     if (env.demoMode) {
+      if (!workOrder) throw new Error('Work order not found or access denied.')
+      const checkoutError = operationCheckoutError(workOrder, input.routingStepId, data.toolAssemblies)
+      if (checkoutError) throw new Error(checkoutError)
       const event: ProductionEvent = {
         id: crypto.randomUUID(), organizationId: profile.organizationId, workOrderId: input.workOrderId,
         routingStepId: input.routingStepId, eventType: input.eventType, quantity: input.quantity,
@@ -384,6 +427,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     if (!templateName) throw new Error('Enter a template name.')
     if (input.steps.length === 0) throw new Error('Add at least one routing step.')
     if (input.steps.some((step) => !step.name.trim() || !step.customerStageName.trim())) throw new Error('Every routing step needs an internal step and customer stage.')
+    for (const step of input.steps) { const toolingError = validateToolingDraft(step.tooling ?? []); if (toolingError) throw new Error(toolingError) }
+    if (input.steps.some((step) => (step.tooling ?? []).some((tool) => data?.toolAssemblies.find((assembly) => assembly.id === tool.toolAssemblyId)?.archivedAt))) throw new Error('Replace archived tooling before saving routing defaults.')
     if (env.demoMode) {
       setData((current) => {
         if (!current) return current
@@ -393,7 +438,10 @@ export function ShopProvider({ children }: { children: ReactNode }) {
           organizationId: input.organizationId,
           templateName,
           archivedAt: existing?.archivedAt ?? null,
-          steps: input.steps.map((step, index) => ({ id: crypto.randomUUID(), routingTemplateId: input.id, sequenceNumber: (index + 1) * 10, routingStepName: step.name.trim(), customerStageName: step.customerStageName.trim(), workInstructions: step.instructions })),
+          steps: input.steps.map((step, index) => {
+            const operationId = crypto.randomUUID()
+            return { id: operationId, routingTemplateId: input.id, sequenceNumber: (index + 1) * 10, routingStepName: step.name.trim(), customerStageName: step.customerStageName.trim(), workInstructions: step.instructions, tooling: (step.tooling ?? []).map((tool, toolIndex) => { const assembly = current.toolAssemblies.find((candidate) => candidate.id === tool.toolAssemblyId)!; return { id: crypto.randomUUID(), routingOperationId: operationId, toolAssemblyId: tool.toolAssemblyId, toolAssemblyNumber: assembly.assemblyNumber, toolAssemblyName: assembly.name, toolAssemblyDescription: assembly.description, toolNumber: normalizeToolNumber(tool.toolNumber), sequenceNumber: (toolIndex + 1) * 10, notes: tool.notes } }) }
+          }),
         }
         return { ...current, routingTemplates: existing ? current.routingTemplates.map((template) => template.id === input.id ? saved : template) : [...current.routingTemplates, saved] }
       })
@@ -416,6 +464,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     const salesOrder = data?.salesOrders.find((order) => order.id === input.salesOrderId)
     if (salesOrder?.archivedAt) throw new Error('Restore the sales order before creating work orders.')
     if (salesOrder?.lines.find((line) => line.id === input.salesOrderLineItemId)?.archivedAt) throw new Error('Restore the sales order line before creating work orders.')
+    for (const step of input.routing) { const toolingError = validateToolingDraft((step.tooling ?? []).map((tool, index) => ({ key: tool.sourceRoutingOperationToolId ?? String(index), ...tool }))); if (toolingError) throw new Error(toolingError) }
+    if (input.routing.some((step) => (step.tooling ?? []).some((tool) => data?.toolAssemblies.find((assembly) => assembly.id === tool.toolAssemblyId)?.archivedAt))) throw new Error('Archived tooling cannot be copied to a new Work Order.')
     if (env.demoMode) {
       const id = crypto.randomUUID()
       const firstStepId = crypto.randomUUID()
@@ -425,7 +475,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         if (!current) return current
         const workOrderNumber = nextChronologicalNumber(current.workOrders.filter((workOrder) => workOrder.organizationId === input.organizationId).map((workOrder) => workOrder.workOrderNumber), 6)
         const workOrderName = input.workOrderName.trim() || workOrderNumber
-        return { ...current, workOrders: [...current.workOrders, { id, organizationId: input.organizationId, workOrderNumber, workOrderName, salesOrderId: input.salesOrderId, salesOrderLineItemId: input.salesOrderLineItemId, partNumber: input.partNumber, quantityOrdered: input.quantityOrdered, dueDate: input.dueDate, releasedAt, completionDate: null, archivedAt: null, notes: input.notes, routing }], productionEvents: [...current.productionEvents, { id: crypto.randomUUID(), organizationId: input.organizationId, workOrderId: id, routingStepId: firstStepId, eventType: 'release', quantity: input.quantityOrdered, fromRoutingStepId: null, toRoutingStepId: firstStepId, reversedEventId: null, actorId: profile?.id ?? null, requestId: null, createdAt: releasedAt }] }
+        const operationTooling = input.routing.flatMap((step, index) => (step.tooling ?? []).map((tool, toolIndex) => { const assembly = current.toolAssemblies.find((candidate) => candidate.id === tool.toolAssemblyId)!; return { id: crypto.randomUUID(), workOrderOperationId: routing[index].id, toolAssemblyId: tool.toolAssemblyId, toolAssemblyNumber: assembly.assemblyNumber, toolAssemblyName: assembly.name, toolAssemblyDescription: assembly.description, toolNumber: normalizeToolNumber(tool.toolNumber), sequenceNumber: (toolIndex + 1) * 10, notes: tool.notes, sourceRoutingOperationToolId: tool.sourceRoutingOperationToolId } }))
+        return refreshDemoToolStatus({ ...current, workOrders: [...current.workOrders, { id, organizationId: input.organizationId, workOrderNumber, workOrderName, salesOrderId: input.salesOrderId, salesOrderLineItemId: input.salesOrderLineItemId, partNumber: input.partNumber, quantityOrdered: input.quantityOrdered, dueDate: input.dueDate, releasedAt, completionDate: null, archivedAt: null, notes: input.notes, routing, operationTooling }], productionEvents: [...current.productionEvents, { id: crypto.randomUUID(), organizationId: input.organizationId, workOrderId: id, routingStepId: firstStepId, eventType: 'release', quantity: input.quantityOrdered, fromRoutingStepId: null, toRoutingStepId: firstStepId, reversedEventId: null, actorId: profile?.id ?? null, requestId: null, createdAt: releasedAt }] })
       })
     } else {
       const request = requestIdFor('create-work-order', input)
@@ -451,7 +502,83 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     setNotice(`Added ${input.quantity} overrun piece${input.quantity === 1 ? '' : 's'}`)
   }
 
-  const value: ShopValue = { data, loading, error, notice, lastEventId, refresh, loadMore, transact, undoLast, addQuestion, addCustomer, editCustomer, addSalesOrder, addSalesOrderLine, editSalesOrderLine, setSalesOrderLineArchived, setSalesOrderArchived, setWorkOrderArchived, editWorkOrder, markOrderMilestone, saveRoutingTemplate, setRoutingTemplateArchived, addWorkOrder, addProductionAdjustment, clearNotice: () => setNotice(null) }
+  const saveToolAssembly: ShopValue['saveToolAssembly'] = async (input) => {
+    if (profile?.role !== 'manufacturer' || input.organizationId !== profile.organizationId) throw new Error('Only shop users can save tool assemblies for their organization.')
+    if (env.demoMode) {
+      setData((current) => {
+        if (!current) return current
+        const existing = current.toolAssemblies.find((tool) => tool.id === input.id)
+        const timestamp = new Date().toISOString()
+        const assemblyNumber = existing?.assemblyNumber ?? nextPrefixedChronologicalNumber(current.toolAssemblies.filter((tool) => tool.organizationId === input.organizationId).map((tool) => tool.assemblyNumber), 'TA-', 3)
+        const saved = { id: input.id, organizationId: input.organizationId, assemblyNumber, name: input.name.trim() || assemblyNumber, description: input.description, quantityCheckedOut: existing?.quantityCheckedOut ?? 0, quantityInUse: existing?.quantityInUse ?? 0, futureRequirements: existing?.futureRequirements ?? 0, usageWarning: (existing?.quantityInUse ?? 0) > 1, imagePath: existing?.imagePath ?? null, imageUrl: existing?.imageUrl ?? null, archivedAt: existing?.archivedAt ?? null, createdAt: existing?.createdAt ?? timestamp, updatedAt: timestamp }
+        const withSavedAssembly = { ...current, toolAssemblies: existing ? current.toolAssemblies.map((tool) => tool.id === input.id ? saved : tool) : [...current.toolAssemblies, saved] }
+        return refreshDemoToolStatus(refreshDemoToolMasterReferences(withSavedAssembly, saved))
+      })
+    } else { await saveToolAssemblyRecord(input); await refresh() }
+    setNotice('Tool assembly saved')
+  }
+
+  const uploadToolAssemblyImage: ShopValue['uploadToolAssemblyImage'] = async (toolAssemblyId, organizationId, file) => {
+    if (profile?.role !== 'manufacturer' || organizationId !== profile.organizationId) throw new Error('Only shop users can upload tool assembly images for their organization.')
+    await validateToolAssemblyImage(file)
+    if (env.demoMode) {
+      const imageUrl = await readImageAsDataUrl(file)
+      setData((current) => current ? { ...current, toolAssemblies: current.toolAssemblies.map((tool) => tool.id === toolAssemblyId ? { ...tool, imagePath: `demo/${toolAssemblyId}/${file.name}`, imageUrl, updatedAt: new Date().toISOString() } : tool) } : current)
+    } else { await uploadToolAssemblyImageRecord({ toolAssemblyId, organizationId, file }); await refresh() }
+    setNotice('Tool assembly image saved')
+  }
+
+  const removeToolAssemblyImage: ShopValue['removeToolAssemblyImage'] = async (toolAssemblyId, currentImagePath) => {
+    if (profile?.role !== 'manufacturer') throw new Error('Only shop users can remove tool assembly images.')
+    if (env.demoMode) setData((current) => current ? { ...current, toolAssemblies: current.toolAssemblies.map((tool) => tool.id === toolAssemblyId ? { ...tool, imagePath: null, imageUrl: null, updatedAt: new Date().toISOString() } : tool) } : current)
+    else { await removeToolAssemblyImageRecord(toolAssemblyId, currentImagePath); await refresh() }
+    setNotice('Tool assembly image removed')
+  }
+
+  const setToolAssemblyArchived: ShopValue['setToolAssemblyArchived'] = async (toolAssemblyId, archived) => {
+    if (profile?.role !== 'manufacturer') throw new Error('Only shop users can archive tool assemblies.')
+    if (env.demoMode) setData((current) => current ? { ...current, toolAssemblies: current.toolAssemblies.map((tool) => tool.id === toolAssemblyId ? { ...tool, archivedAt: archived ? new Date().toISOString() : null } : tool) } : current)
+    else { await setToolAssemblyArchivedRecord(toolAssemblyId, archived); await refresh() }
+    setNotice(archived ? 'Tool assembly archived' : 'Tool assembly restored')
+  }
+
+  const recordToolCheckout: ShopValue['recordToolCheckout'] = async (input) => {
+    if (!data || profile?.role !== 'manufacturer') throw new Error('Only shop users can check tooling in or out.')
+    const tool = data.toolAssemblies.find((candidate) => candidate.id === input.toolAssemblyId)
+    if (!tool) throw new Error('Tool assembly not found or access denied.')
+    const validationError = validateCheckoutTransaction(tool.quantityCheckedOut, input.transactionType, tool.quantityInUse)
+    if (validationError) throw new Error(validationError)
+    if (env.demoMode) {
+      setData((current) => current ? refreshDemoToolStatus({ ...current, toolCheckoutTransactions: [{ id: crypto.randomUUID(), organizationId: tool.organizationId, toolAssemblyId: tool.id, transactionType: input.transactionType, note: input.note, actorId: profile.id, actorDisplayName: profile.displayName, createdAt: new Date().toISOString() }, ...current.toolCheckoutTransactions] }) : current)
+    } else {
+      const request = requestIdFor('tool-checkout', input)
+      await recordToolCheckoutRecord({ ...input, requestId: request.requestId })
+      completeRequest(request.key)
+      await refresh()
+    }
+    setNotice(input.transactionType === 'CHECK_OUT' ? 'Tooling checked out' : 'Tooling checked in')
+  }
+
+  const saveWorkOrderOperationTools: ShopValue['saveWorkOrderOperationTools'] = async (operationId, tooling) => {
+    if (!data || profile?.role !== 'manufacturer') throw new Error('Only shop users can change Work Order tooling.')
+    const toolingError = validateToolingDraft(tooling)
+    if (toolingError) throw new Error(toolingError)
+    const currentAssignments = data.workOrders.flatMap((workOrder) => workOrder.operationTooling ?? []).filter((tool) => tool.workOrderOperationId === operationId)
+    if (tooling.some((draft) => data.toolAssemblies.find((assembly) => assembly.id === draft.toolAssemblyId)?.archivedAt
+      && !currentAssignments.some((existing) => existing.id === draft.key && existing.toolAssemblyId === draft.toolAssemblyId))) throw new Error('Archived tooling cannot be newly assigned.')
+    if (env.demoMode) {
+      setData((current) => {
+        if (!current) return current
+        const workOrder = current.workOrders.find((candidate) => candidate.routing.some((step) => step.id === operationId))
+        if (!workOrder || workOrder.archivedAt) throw new Error('Restore the work order before changing tooling.')
+        const replacements = tooling.map((draft, index) => { const assembly = current.toolAssemblies.find((candidate) => candidate.id === draft.toolAssemblyId)!; return { id: draft.key, workOrderOperationId: operationId, toolAssemblyId: draft.toolAssemblyId, toolAssemblyNumber: assembly.assemblyNumber, toolAssemblyName: assembly.name, toolAssemblyDescription: assembly.description, toolNumber: normalizeToolNumber(draft.toolNumber), sequenceNumber: (index + 1) * 10, notes: draft.notes, sourceRoutingOperationToolId: draft.sourceRoutingOperationToolId ?? null } })
+        return refreshDemoToolStatus({ ...current, workOrders: current.workOrders.map((candidate) => candidate.id === workOrder.id ? { ...candidate, operationTooling: [...(candidate.operationTooling ?? []).filter((tool) => tool.workOrderOperationId !== operationId), ...replacements] } : candidate) })
+      })
+    } else { await saveWorkOrderOperationToolsRecord(operationId, tooling); await refresh() }
+    setNotice('Work Order tooling updated')
+  }
+
+  const value: ShopValue = { data, loading, error, notice, lastEventId, refresh, loadMore, transact, undoLast, addQuestion, addCustomer, editCustomer, addSalesOrder, addSalesOrderLine, editSalesOrderLine, setSalesOrderLineArchived, setSalesOrderArchived, setWorkOrderArchived, editWorkOrder, markOrderMilestone, saveRoutingTemplate, setRoutingTemplateArchived, addWorkOrder, addProductionAdjustment, saveToolAssembly, uploadToolAssemblyImage, removeToolAssemblyImage, setToolAssemblyArchived, recordToolCheckout, saveWorkOrderOperationTools, clearNotice: () => setNotice(null) }
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>
 }
 

@@ -6,12 +6,26 @@ const northstarId = '20000000-0000-0000-0000-000000000002'
 
 export const demoData: ShopData = {
   organization: { id: orgId, name: 'Northline Machine Co.', plantTimezone: 'America/Detroit' },
+  toolAssemblies: [
+    { id: 'tool-ta-001', organizationId: orgId, assemblyNumber: 'TA-001', name: '2" Face Mill Assembly', description: 'General-purpose aluminum face mill.', quantityCheckedOut: 0, quantityInUse: 1, futureRequirements: 0, usageWarning: false, imagePath: null, imageUrl: null, archivedAt: null, createdAt: '2026-07-01T12:00:00Z', updatedAt: '2026-08-20T12:00:00Z' },
+    { id: 'tool-ta-014', organizationId: orgId, assemblyNumber: 'TA-014', name: '1/2" End Mill Assembly', description: 'Individually tracked assembly A.', quantityCheckedOut: 1, quantityInUse: 1, futureRequirements: 1, usageWarning: false, imagePath: null, imageUrl: null, archivedAt: null, createdAt: '2026-07-02T12:00:00Z', updatedAt: '2026-08-20T12:00:00Z' },
+    { id: 'tool-ta-015', organizationId: orgId, assemblyNumber: 'TA-015', name: '1/2" End Mill Assembly', description: 'Individually tracked assembly B.', quantityCheckedOut: 0, quantityInUse: 0, futureRequirements: 0, usageWarning: false, imagePath: null, imageUrl: null, archivedAt: null, createdAt: '2026-07-02T12:05:00Z', updatedAt: '2026-08-20T12:00:00Z' },
+    { id: 'tool-ta-022', organizationId: orgId, assemblyNumber: 'TA-022', name: '#7 Drill Assembly', description: '', quantityCheckedOut: 0, quantityInUse: 1, futureRequirements: 0, usageWarning: false, imagePath: null, imageUrl: null, archivedAt: null, createdAt: '2026-07-03T12:00:00Z', updatedAt: '2026-08-20T12:00:00Z' },
+    { id: 'tool-ta-legacy', organizationId: orgId, assemblyNumber: 'TA-009', name: 'Legacy Spot Drill Assembly', description: 'Retained for historical records.', quantityCheckedOut: 0, quantityInUse: 0, futureRequirements: 0, usageWarning: false, imagePath: null, imageUrl: null, archivedAt: '2026-08-01T12:00:00Z', createdAt: '2026-06-01T12:00:00Z', updatedAt: '2026-08-01T12:00:00Z' },
+  ],
+  toolCheckoutTransactions: [
+    { id: 'tool-checkout-1', organizationId: orgId, toolAssemblyId: 'tool-ta-014', transactionType: 'CHECK_OUT', note: 'Moved to mill bench', actorId: 'demo-user', actorDisplayName: 'Jamie Chen', createdAt: '2026-08-25T13:00:00Z' },
+  ],
   routingTemplates: [
     {
       id: 'routing-template-mill', organizationId: orgId, templateName: 'Standard mill route', archivedAt: null,
       steps: [
         { id: 'routing-template-mill-10', routingTemplateId: 'routing-template-mill', sequenceNumber: 10, routingStepName: 'Saw', customerStageName: 'In production', workInstructions: 'Cut blanks to the work-order traveler dimensions.' },
-        { id: 'routing-template-mill-20', routingTemplateId: 'routing-template-mill', sequenceNumber: 20, routingStepName: 'CNC Mill', customerStageName: 'In production', workInstructions: 'Machine per the current drawing and setup sheet.' },
+        { id: 'routing-template-mill-20', routingTemplateId: 'routing-template-mill', sequenceNumber: 20, routingStepName: 'CNC Mill', customerStageName: 'In production', workInstructions: 'Machine per the current drawing and setup sheet.', tooling: [
+          { id: 'routing-tool-mill-1', routingOperationId: 'routing-template-mill-20', toolAssemblyId: 'tool-ta-001', toolAssemblyNumber: 'TA-001', toolAssemblyName: '2" Face Mill Assembly', toolAssemblyDescription: 'General-purpose aluminum face mill.', toolNumber: 'T01', sequenceNumber: 10, notes: '' },
+          { id: 'routing-tool-mill-2', routingOperationId: 'routing-template-mill-20', toolAssemblyId: 'tool-ta-014', toolAssemblyNumber: 'TA-014', toolAssemblyName: '1/2" End Mill Assembly', toolAssemblyDescription: '', toolNumber: 'T03', sequenceNumber: 20, notes: '' },
+          { id: 'routing-tool-mill-3', routingOperationId: 'routing-template-mill-20', toolAssemblyId: 'tool-ta-022', toolAssemblyNumber: 'TA-022', toolAssemblyName: '#7 Drill Assembly', toolAssemblyDescription: '', toolNumber: 'T07', sequenceNumber: 30, notes: '' },
+        ] },
         { id: 'routing-template-mill-30', routingTemplateId: 'routing-template-mill', sequenceNumber: 30, routingStepName: 'Deburr', customerStageName: 'Finishing', workInstructions: 'Break sharp edges and remove all burrs.' },
         { id: 'routing-template-mill-40', routingTemplateId: 'routing-template-mill', sequenceNumber: 40, routingStepName: 'Final Inspection', customerStageName: 'Inspection', workInstructions: 'Complete final inspection per the traveler and drawing.' },
       ],
@@ -58,6 +72,11 @@ export const demoData: ShopData = {
         { id: 'step-824-20', workOrderId: 'wo-260824', sequenceNumber: 20, routingStepName: 'CNC Mill · Haas VF-2', customerStageName: 'In production', workInstructions: 'Run OP10 and OP20 per setup sheet SS-4402. Verify first article before continuing.', notes: '' },
         { id: 'step-824-30', workOrderId: 'wo-260824', sequenceNumber: 30, routingStepName: 'Deburr', customerStageName: 'Finishing', workInstructions: 'Break edges .005–.015. No visible tool marks on face A.', notes: '' },
         { id: 'step-824-40', workOrderId: 'wo-260824', sequenceNumber: 40, routingStepName: 'Final Inspection', customerStageName: 'Inspection', workInstructions: 'Inspect per drawing ACM-4402 Rev F. Record dimensions 3, 7, and 12.', notes: '' },
+      ],
+      operationTooling: [
+        { id: 'wo-tool-824-20-1', workOrderOperationId: 'step-824-20', toolAssemblyId: 'tool-ta-001', toolAssemblyNumber: 'TA-001', toolAssemblyName: '2" Face Mill Assembly', toolAssemblyDescription: 'General-purpose aluminum face mill.', toolNumber: 'T01', sequenceNumber: 10, notes: '', sourceRoutingOperationToolId: 'routing-tool-mill-1' },
+        { id: 'wo-tool-824-20-2', workOrderOperationId: 'step-824-20', toolAssemblyId: 'tool-ta-014', toolAssemblyNumber: 'TA-014', toolAssemblyName: '1/2" End Mill Assembly', toolAssemblyDescription: '', toolNumber: 'T03', sequenceNumber: 20, notes: '', sourceRoutingOperationToolId: 'routing-tool-mill-2' },
+        { id: 'wo-tool-824-20-3', workOrderOperationId: 'step-824-20', toolAssemblyId: 'tool-ta-022', toolAssemblyNumber: 'TA-022', toolAssemblyName: '#7 Drill Assembly', toolAssemblyDescription: '', toolNumber: 'T07', sequenceNumber: 30, notes: '', sourceRoutingOperationToolId: 'routing-tool-mill-3' },
       ],
     },
     {

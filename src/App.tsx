@@ -26,6 +26,7 @@ const SalesOrdersPage = lazy(() => import('./pages/SalesOrdersPage').then((modul
 const WorkOrderDetailPage = lazy(() => import('./pages/WorkOrderDetailPage').then((module) => ({ default: module.WorkOrderDetailPage })))
 const WorkOrdersPage = lazy(() => import('./pages/WorkOrdersPage').then((module) => ({ default: module.WorkOrdersPage })))
 const UsersPage = lazy(() => import('./pages/UsersPage').then((module) => ({ default: module.UsersPage })))
+const ToolLibraryPage = lazy(() => import('./pages/ToolLibraryPage').then((module) => ({ default: module.ToolLibraryPage })))
 
 function HomeRedirect() {
   const { session, profile, loading } = useAuth()
@@ -53,6 +54,8 @@ export default function App() {
       <Route path="work-orders" element={<WorkOrdersPage />} />
       <Route path="work-orders/:workOrderId" element={<WorkOrderDetailPage />} />
       <Route path="routing" element={<RoutingTemplatesPage />} />
+      <Route path="tools" element={<ToolLibraryPage />} />
+      <Route path="tools/:toolAssemblyId" element={<ToolLibraryPage />} />
       <Route path="questions" element={<QuestionsPage />} />
       <Route path="documents" element={<DocumentsPage />} />
       <Route path="users" element={<UsersPage />} />

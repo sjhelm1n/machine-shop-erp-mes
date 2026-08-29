@@ -1,4 +1,4 @@
-import type { ProductionEvent, ProductionEventType, ProductionStepSnapshot } from './types'
+import type { ProductionEvent, ProductionEventType, ProductionStepSnapshot, ProductionToolCheckoutRequirement } from './types'
 
 function record(value: unknown, contract: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${contract} returned an invalid record.`)
@@ -57,5 +57,24 @@ export function parseProductionStepSnapshot(value: unknown): ProductionStepSnaps
     scrapped: integer(row.scrapped, 'scrapped'),
     nextStepId: nullableString(row.next_step_id, 'next_step_id'),
     nextStepName: nullableString(row.next_step_name, 'next_step_name'),
+    toolCheckoutRequirements: [],
+  }
+}
+
+export function parseProductionToolCheckoutRequirement(value: unknown): ProductionToolCheckoutRequirement {
+  const row = record(value, 'Production tooling requirement RPC')
+  const operationRole = string(row.operation_role, 'operation_role')
+  if (operationRole !== 'current' && operationRole !== 'next') throw new Error('Database contract field operation_role is unsupported.')
+  if (typeof row.checked_out !== 'boolean') throw new Error('Database contract field checked_out must be a boolean.')
+  return {
+    operationRole,
+    routingStepId: string(row.routing_step_id, 'routing_step_id'),
+    sequenceNumber: integer(row.sequence_number, 'sequence_number'),
+    routingStepName: string(row.routing_step_name, 'routing_step_name'),
+    toolAssemblyId: string(row.tool_assembly_id, 'tool_assembly_id'),
+    assemblyNumber: string(row.assembly_number, 'assembly_number'),
+    toolName: string(row.tool_name, 'tool_name'),
+    toolDescription: typeof row.tool_description === 'string' ? row.tool_description : '',
+    checkedOut: row.checked_out,
   }
 }

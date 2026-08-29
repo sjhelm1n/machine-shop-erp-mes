@@ -1,7 +1,7 @@
 import { ChevronDown, ClipboardList, Factory, Files, HelpCircle, LayoutDashboard, LogOut, Menu, MonitorCheck, PackageCheck, QrCode, Route as RouteIcon, UserCog, Users, X } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ComponentType } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { EndMillIcon } from '../components/EndMillIcon'
 import { ProductionQrScanner } from '../components/ProductionQrScanner'
 import { useAuth } from '../context/AuthContext'
 import { useShop } from '../context/ShopContext'
@@ -10,7 +10,7 @@ import { env } from '../lib/env'
 type NavItem = {
   to: string
   label: string
-  icon: LucideIcon
+  icon: ComponentType<{ size?: number }>
   end?: boolean
   children?: NavItem[]
 }
@@ -20,6 +20,7 @@ const manufacturerNav: NavItem[] = [
   { to: '/app/sales-orders', label: 'Sales orders', icon: ClipboardList },
   { to: '/app/work-orders', label: 'Work orders', icon: Factory },
   { to: '/app/routing', label: 'Routing', icon: RouteIcon },
+  { to: '/app/tools', label: 'Tool Library', icon: EndMillIcon },
   {
     to: '/app/customers',
     label: 'Customers',
@@ -91,7 +92,7 @@ export function AppShell() {
     </aside>
     {open && <button className="nav-scrim" onClick={() => setOpen(false)} aria-label="Close navigation" />}
     <div className="app-main">
-      <div className="mobile-bar"><button onClick={() => setOpen(true)} aria-label="Open navigation"><Menu /></button><strong><img className="mobile-logo" src="/brand/shopcore-mark.png" alt="" aria-hidden="true" />ShopCore ERP</strong>{profile?.role === 'manufacturer' ? <button className="mobile-scan-button" onClick={() => setScannerOpen(true)} aria-label="Scan traveler QR code"><QrCode /></button> : <span>Portal</span>}</div>
+      <div className="mobile-bar"><button onClick={() => setOpen(true)} aria-label="Open navigation"><Menu /></button><strong><img className="mobile-logo" src="/brand/shopcore-mark.png" alt="" aria-hidden="true" />ShopCore ERP</strong>{profile?.role === 'manufacturer' ? <button className="mobile-scan-button" onClick={() => setScannerOpen(true)} aria-label="Scan ShopCore QR code"><QrCode /></button> : <span>Portal</span>}</div>
       <Outlet />
     </div>
     {scannerOpen && profile?.role === 'manufacturer' && <ProductionQrScanner onClose={closeScanner} />}
