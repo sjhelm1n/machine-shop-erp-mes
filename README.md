@@ -135,7 +135,10 @@ Deploy the authenticated `manage-users` Edge Function after applying the user-ma
 
 ```bash
 npx supabase functions deploy manage-users
+npx supabase functions deploy production-access --no-verify-jwt
 ```
+
+`production-access` is intentionally reachable without a Supabase user JWT because it performs its own Device ID, network, PIN, lockout, and short-lived session checks. Its database tables and station RPCs remain inaccessible to browser roles; only the server-provided service credential can use them. Optionally set a server-only `SHOPCORE_PRODUCTION_PEPPER` secret before enrolling phones. Never expose that secret through a `VITE_` variable.
 
 For hosted preview or production invitation links, set the server-only Edge Function secret
 `SHOPCORE_ALLOWED_INVITE_ORIGINS` to a comma-separated list of exact origins, such as
@@ -157,7 +160,19 @@ Self-hosted installations can create their first organization without a shell co
 
 The database—not the hidden link—enforces the important rules. It requires a verified email, normalizes the submitted company name by trimming it, collapsing repeated whitespace, and ignoring capitalization, then permits only one ShopCore tenant per normalized company name. Personal email providers are allowed and email domains do not claim tenants. Anyone joining an existing tenant must still be invited by that organization’s administrator. The first super admin cannot be removed or demoted through normal user management.
 
-The computer check and hidden two-key gesture are deliberate interface friction, not authentication or security controls. Because this token-free open-source flow allows any verified business-domain user to claim a previously unused domain, do not expose a fresh deployment publicly unless that tradeoff is acceptable. Operators needing stricter ownership proof should disable public sign-ups in Supabase until they are ready to initialize the shop or add a deployment-specific approval mechanism.
+The computer check and hidden two-key gesture are deliberate interface friction, not authentication or security controls. Because this token-free open-source flow allows any verified user to claim a previously unused company name, do not expose a fresh deployment publicly unless that tradeoff is acceptable. Operators needing stricter ownership proof should disable public sign-ups in Supabase until they are ready to initialize the shop or add a deployment-specific approval mechanism.
+
+### Production phone enrollment and PINs
+
+Browsers cannot read a phone’s MAC address, and modern phones randomize MAC addresses. ShopCore therefore creates its own random Device ID and stores the private device credential only in that phone’s browser storage.
+
+1. Add and activate each operator as **Plant staff** on `/app/users`.
+2. On the shop network, the operator scans any routing-step QR code using the phone/browser that will be used for production. The phone displays an eight-character Device ID and creates a pending request.
+3. The super admin opens **Users → Plant staff → Production devices**, matches the Device ID, chooses the operator, and approves the phone.
+4. The operator taps **Check approval** on the phone and creates a unique six-digit production PIN. The PIN is salted, server-peppered, and stored only as a hash.
+5. On later scans, the same approved phone on the approved network needs only that PIN after its production session expires. Sessions last at most eight hours and lock after 30 minutes without activity.
+
+Five incorrect PIN attempts lock that device for 15 minutes. A super admin can revoke a phone or reset an operator PIN from the Users page; resetting also revokes that operator’s current production sessions. If the shop’s public IP changes, the phone reports a pending network change for super-admin approval. Cellular failover, VPNs, browser storage clearing, private browsing, or using a different browser can therefore require a new approval. Production PIN access is limited to the QR production screen and never grants general ERP access.
 
 In Supabase Auth settings:
 
@@ -237,6 +252,7 @@ The rollback-only pgTAP file in `supabase/tests/database` checks RLS, denied pat
 
 - Apply migrations to a staging Supabase project through Supabase MCP and execute the rollback-only pgTAP file with `finish(true)`.
 - Deploy the authenticated `manage-users` Edge Function and verify its invite and removal paths with both manufacturer and customer sessions.
+- Deploy the custom-auth `production-access` Edge Function with JWT verification disabled, then verify enrollment, approval, PIN setup, lockout, network-change approval, posting, undo, reset, and revocation on real phones.
 - Create Auth users and profile associations; test one manufacturer and both customers.
 - Upload a real PDF and verify each customer can download only its own invoice.
 - Print a traveler and scan every QR code using the phones used on the shop floor.

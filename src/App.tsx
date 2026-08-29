@@ -43,7 +43,7 @@ export default function App() {
     <Route path="/create-account" element={<CreateAccountPage />} />
     <Route path="/finish-account" element={<FinishAccountPage />} />
     <Route path="/setup" element={<ProtectedRoute role="manufacturer"><SetupPage /></ProtectedRoute>} />
-    <Route path="/produce/:workOrderId/:stepId" element={<ProtectedRoute role="manufacturer"><ProductionPage /></ProtectedRoute>} />
+    <Route path="/produce/:workOrderId/:stepId" element={<ProductionPage />} />
     <Route path="/app" element={<ProtectedRoute role="manufacturer"><OnboardingGate><AppShell /></OnboardingGate></ProtectedRoute>}>
       <Route index element={<DashboardPage />} />
       <Route path="customers" element={<CustomersPage />} />

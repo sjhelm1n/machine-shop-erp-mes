@@ -13,6 +13,9 @@ select has_table('public', 'routing_template_steps', 'routing template steps exi
 select has_table('public', 'customer_messages', 'customer_messages exists');
 select has_table('public', 'customer_documents', 'customer documents exist');
 select has_table('public', 'user_invitations', 'user invitation audit records exist');
+select has_table('public', 'production_devices', 'production device registrations exist');
+select has_table('public', 'production_operator_codes', 'production operator PIN hashes exist');
+select has_table('public', 'production_device_sessions', 'production device sessions exist');
 select has_column('public', 'customers', 'portal_email_domain', 'customers own a portal email-domain boundary');
 select has_column('public', 'profiles', 'email', 'profiles expose the normalized login email to authorized user managers');
 select has_column('public', 'profiles', 'activated_at', 'profiles record invitation activation');
@@ -54,6 +57,7 @@ select has_column('public', 'work_orders', 'archived_at', 'work orders can be ar
 select has_column('public', 'sales_order_line_items', 'archived_at', 'sales-order lines can be archived without deletion');
 select has_column('public', 'production_events', 'actor_id', 'production events capture the trusted actor');
 select has_column('public', 'production_events', 'request_id', 'production events have a durable idempotency key');
+select has_column('public', 'production_events', 'production_device_id', 'station events capture the approved production device');
 select is((select is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'sales_orders' and column_name = 'sales_order_name'), 'NO', 'sales order names are required after defaulting');
 select is((select is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'work_orders' and column_name = 'work_order_name'), 'NO', 'work order names are required after defaulting');
 
@@ -112,6 +116,9 @@ select ok(not has_table_privilege('authenticated', 'public.audit_log', 'INSERT')
 select ok(not has_table_privilege('authenticated', 'public.audit_log', 'UPDATE'), 'authenticated users cannot rewrite audit history');
 select ok(not has_table_privilege('authenticated', 'public.audit_log', 'DELETE'), 'authenticated users cannot delete audit history');
 select ok(not has_table_privilege('authenticated', 'public.production_events', 'INSERT'), 'production events can only be posted through trusted RPCs');
+select ok(not has_table_privilege('authenticated', 'public.production_devices', 'SELECT'), 'production device credentials are not exposed to authenticated clients');
+select ok(not has_table_privilege('authenticated', 'public.production_operator_codes', 'SELECT'), 'production PIN hashes are not exposed to authenticated clients');
+select ok(not has_table_privilege('authenticated', 'public.production_device_sessions', 'SELECT'), 'production session hashes are not exposed to authenticated clients');
 select ok(not has_table_privilege('authenticated', 'public.user_invitations', 'SELECT'), 'invitation records are not directly exposed');
 select ok(not has_table_privilege('authenticated', 'public.user_invitations', 'INSERT'), 'invitation records can only be created through the trusted RPC');
 select ok(not has_table_privilege('authenticated', 'public.sales_orders', 'INSERT'), 'sales orders can only be created atomically through the RPC');
@@ -136,6 +143,9 @@ select has_function('public', 'update_sales_order_line', array['uuid', 'jsonb'],
 select has_function('public', 'set_sales_order_line_archived', array['uuid', 'boolean'], 'sales-order line archive RPC exists');
 select has_function('public', 'record_production_event_v2', array['uuid', 'uuid', 'text', 'integer', 'uuid', 'uuid'], 'retry-safe production posting RPC exists');
 select has_function('public', 'production_step_snapshot', array['uuid', 'uuid'], 'narrow production snapshot RPC exists');
+select has_function('public', 'station_production_step_snapshot', array['uuid', 'uuid', 'uuid', 'uuid', 'uuid'], 'service-only station snapshot RPC exists');
+select has_function('public', 'record_station_production_event', array['uuid', 'uuid', 'uuid', 'uuid', 'uuid', 'text', 'integer', 'uuid', 'uuid'], 'service-only station posting RPC exists');
+select ok(not has_function_privilege('authenticated', 'public.station_production_step_snapshot(uuid,uuid,uuid,uuid,uuid)', 'EXECUTE'), 'authenticated clients cannot bypass the production-access function');
 select has_function('public', 'work_order_step_metrics', array['uuid[]'], 'bounded set-wise work-order metrics RPC exists');
 select has_function('public', 'dashboard_metrics', array['date', 'date', 'text'], 'tenant-scoped dashboard reporting RPC exists');
 select has_function('public', 'dashboard_production_complete_open_orders', array[]::text[], 'production-complete open sales-order dashboard RPC exists');
@@ -591,6 +601,79 @@ select ok(
       and source = 'record_production_event_v2'
   ),
   'production audit history preserves request, actor, operation, and source'
+);
+reset role;
+
+-- Production phones are pending until a super admin assigns them. Only the
+-- service role can exchange the server-verified device session for narrow RPCs.
+insert into public.production_devices(
+  id, organization_id, device_name, credential_hash, network_hash, expires_at
+) values (
+  '82000000-0000-4000-a000-000000000091',
+  '10000000-0000-0000-0000-000000000099',
+  'Test phone', repeat('a', 64), repeat('b', 64), now() + interval '1 year'
+);
+set local role service_role;
+select lives_ok(
+  $$select public.manage_production_device('30000000-0000-0000-0000-000000000099', '82000000-0000-4000-a000-000000000091', 'approve', '30000000-0000-0000-0000-000000000099')$$,
+  'the plant super admin can assign and approve a production device'
+);
+select lives_ok(
+  $$select public.set_production_operator_code('30000000-0000-0000-0000-000000000099', '82000000-0000-4000-a000-000000000091', 'test-salt-value-1234', repeat('c', 64))$$,
+  'an approved operator device can establish a hashed production PIN'
+);
+select is(
+  (select work_order_id from public.station_production_step_snapshot(
+    '10000000-0000-0000-0000-000000000099',
+    '30000000-0000-0000-0000-000000000099',
+    '82000000-0000-4000-a000-000000000091',
+    '60000000-0000-0000-0000-000000000091',
+    '70000000-0000-4000-a000-000000000091'
+  )),
+  '60000000-0000-0000-0000-000000000091'::uuid,
+  'an approved device receives only its requested production-step snapshot'
+);
+select lives_ok(
+  $$select public.record_station_production_event(
+    '10000000-0000-0000-0000-000000000099',
+    '30000000-0000-0000-0000-000000000099',
+    '82000000-0000-4000-a000-000000000091',
+    '60000000-0000-0000-0000-000000000091',
+    '70000000-0000-4000-a000-000000000091',
+    'scrap', 1, null,
+    '83000000-0000-4000-a000-000000000091'
+  )$$,
+  'an approved station device can post a production transaction'
+);
+select ok(
+  exists (
+    select 1 from public.production_events
+    where request_id = '83000000-0000-4000-a000-000000000091'
+      and actor_id = '30000000-0000-0000-0000-000000000099'
+      and production_device_id = '82000000-0000-4000-a000-000000000091'
+  ),
+  'station production events preserve both operator and device provenance'
+);
+select ok(
+  exists (
+    select 1 from public.audit_log
+    where request_id = '83000000-0000-4000-a000-000000000091'
+      and actor_id = '30000000-0000-0000-0000-000000000099'
+      and source = 'production_device'
+  ),
+  'station production audit history is attributed to the operator'
+);
+select throws_ok(
+  $$select public.station_production_step_snapshot(
+    '10000000-0000-0000-0000-000000000098',
+    '30000000-0000-0000-0000-000000000099',
+    '82000000-0000-4000-a000-000000000091',
+    '60000000-0000-0000-0000-000000000091',
+    '70000000-0000-4000-a000-000000000091'
+  )$$,
+  '42501',
+  'Production operator not found or access denied',
+  'station access fails closed across tenant boundaries'
 );
 reset role;
 

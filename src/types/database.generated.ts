@@ -339,6 +339,168 @@ export type Database = {
         }
         Relationships: []
       }
+      production_device_sessions: {
+        Row: {
+          created_at: string
+          device_id: string
+          expires_at: string
+          id: string
+          last_seen_at: string
+          operator_id: string
+          organization_id: string
+          revoked_at: string | null
+          session_hash: string
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          expires_at: string
+          id?: string
+          last_seen_at?: string
+          operator_id: string
+          organization_id: string
+          revoked_at?: string | null
+          session_hash: string
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          expires_at?: string
+          id?: string
+          last_seen_at?: string
+          operator_id?: string
+          organization_id?: string
+          revoked_at?: string | null
+          session_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_device_sessions_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "production_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_device_sessions_device_organization_fkey"
+            columns: ["device_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "production_devices"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "production_device_sessions_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_device_sessions_operator_organization_fkey"
+            columns: ["operator_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "production_device_sessions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      production_devices: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          assigned_operator_id: string | null
+          created_at: string
+          credential_hash: string
+          device_name: string
+          expires_at: string
+          failed_attempts: number
+          id: string
+          last_seen_at: string | null
+          locked_until: string | null
+          network_hash: string
+          organization_id: string
+          pending_network_hash: string | null
+          revoked_at: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          assigned_operator_id?: string | null
+          created_at?: string
+          credential_hash: string
+          device_name: string
+          expires_at: string
+          failed_attempts?: number
+          id?: string
+          last_seen_at?: string | null
+          locked_until?: string | null
+          network_hash: string
+          organization_id: string
+          pending_network_hash?: string | null
+          revoked_at?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          assigned_operator_id?: string | null
+          created_at?: string
+          credential_hash?: string
+          device_name?: string
+          expires_at?: string
+          failed_attempts?: number
+          id?: string
+          last_seen_at?: string | null
+          locked_until?: string | null
+          network_hash?: string
+          organization_id?: string
+          pending_network_hash?: string | null
+          revoked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_devices_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_devices_approver_organization_fkey"
+            columns: ["approved_by", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "production_devices_assigned_operator_id_fkey"
+            columns: ["assigned_operator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_devices_operator_organization_fkey"
+            columns: ["assigned_operator_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "production_devices_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       production_events: {
         Row: {
           actor_id: string | null
@@ -347,6 +509,7 @@ export type Database = {
           from_routing_step_id: string | null
           id: string
           organization_id: string
+          production_device_id: string | null
           quantity: number
           request_id: string | null
           reversed_event_id: string | null
@@ -361,6 +524,7 @@ export type Database = {
           from_routing_step_id?: string | null
           id?: string
           organization_id: string
+          production_device_id?: string | null
           quantity: number
           request_id?: string | null
           reversed_event_id?: string | null
@@ -375,6 +539,7 @@ export type Database = {
           from_routing_step_id?: string | null
           id?: string
           organization_id?: string
+          production_device_id?: string | null
           quantity?: number
           request_id?: string | null
           reversed_event_id?: string | null
@@ -395,6 +560,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_events_production_device_id_fkey"
+            columns: ["production_device_id"]
+            isOneToOne: false
+            referencedRelation: "production_devices"
             referencedColumns: ["id"]
           },
           {
@@ -423,6 +595,75 @@ export type Database = {
             columns: ["work_order_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "work_orders"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      production_operator_codes: {
+        Row: {
+          code_hash: string
+          code_salt: string
+          created_at: string
+          disabled_at: string | null
+          organization_id: string
+          profile_id: string
+          set_by: string
+          updated_at: string
+        }
+        Insert: {
+          code_hash: string
+          code_salt: string
+          created_at?: string
+          disabled_at?: string | null
+          organization_id: string
+          profile_id: string
+          set_by: string
+          updated_at?: string
+        }
+        Update: {
+          code_hash?: string
+          code_salt?: string
+          created_at?: string
+          disabled_at?: string | null
+          organization_id?: string
+          profile_id?: string
+          set_by?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_operator_codes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_operator_codes_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_operator_codes_profile_organization_fkey"
+            columns: ["profile_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "production_operator_codes_set_by_fkey"
+            columns: ["set_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_operator_codes_set_by_organization_fkey"
+            columns: ["set_by", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id", "organization_id"]
           },
         ]
@@ -1051,6 +1292,37 @@ export type Database = {
           shipped_at: string
         }[]
       }
+      manage_production_device: {
+        Args: {
+          p_action: string
+          p_admin_id: string
+          p_device_id: string
+          p_operator_id?: string
+        }
+        Returns: {
+          approved_at: string | null
+          approved_by: string | null
+          assigned_operator_id: string | null
+          created_at: string
+          credential_hash: string
+          device_name: string
+          expires_at: string
+          failed_attempts: number
+          id: string
+          last_seen_at: string | null
+          locked_until: string | null
+          network_hash: string
+          organization_id: string
+          pending_network_hash: string | null
+          revoked_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "production_devices"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       mark_sales_order_milestone: {
         Args: { p_milestone: string; p_sales_order_id: string }
         Returns: string
@@ -1087,6 +1359,7 @@ export type Database = {
           from_routing_step_id: string | null
           id: string
           organization_id: string
+          production_device_id: string | null
           quantity: number
           request_id: string | null
           reversed_event_id: string | null
@@ -1117,6 +1390,41 @@ export type Database = {
           from_routing_step_id: string | null
           id: string
           organization_id: string
+          production_device_id: string | null
+          quantity: number
+          request_id: string | null
+          reversed_event_id: string | null
+          routing_step_id: string
+          to_routing_step_id: string | null
+          work_order_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "production_events"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_station_production_event: {
+        Args: {
+          p_device_id: string
+          p_event_type: string
+          p_operator_id: string
+          p_organization_id: string
+          p_quantity: number
+          p_request_id: string
+          p_routing_step_id: string
+          p_to_routing_step_id: string
+          p_work_order_id: string
+        }
+        Returns: {
+          actor_id: string | null
+          created_at: string
+          event_type: string
+          from_routing_step_id: string | null
+          id: string
+          organization_id: string
+          production_device_id: string | null
           quantity: number
           request_id: string | null
           reversed_event_id: string | null
@@ -1132,8 +1440,21 @@ export type Database = {
         }
       }
       remove_user_access: { Args: { p_user_id: string }; Returns: string }
+      reset_production_operator_code: {
+        Args: { p_admin_id: string; p_operator_id: string }
+        Returns: undefined
+      }
       reverse_production_event: {
         Args: { p_event_id: string }
+        Returns: undefined
+      }
+      reverse_station_production_event: {
+        Args: {
+          p_device_id: string
+          p_event_id: string
+          p_operator_id: string
+          p_organization_id: string
+        }
         Returns: undefined
       }
       save_routing_template: {
@@ -1144,6 +1465,15 @@ export type Database = {
           p_template_name: string
         }
         Returns: string
+      }
+      set_production_operator_code: {
+        Args: {
+          p_code_hash: string
+          p_code_salt: string
+          p_device_id: string
+          p_operator_id: string
+        }
+        Returns: undefined
       }
       set_routing_template_archived: {
         Args: { p_archived: boolean; p_template_id: string }
@@ -1160,6 +1490,29 @@ export type Database = {
       set_work_order_archived: {
         Args: { p_archived: boolean; p_work_order_id: string }
         Returns: string
+      }
+      station_production_step_snapshot: {
+        Args: {
+          p_device_id: string
+          p_operator_id: string
+          p_organization_id: string
+          p_routing_step_id: string
+          p_work_order_id: string
+        }
+        Returns: {
+          archived_at: string
+          available: number
+          next_step_id: string
+          next_step_name: string
+          part_number: string
+          routing_step_name: string
+          scrapped: number
+          sequence_number: number
+          step_id: string
+          transferred: number
+          work_order_id: string
+          work_order_name: string
+        }[]
       }
       update_sales_order_line: {
         Args: { p_line: Json; p_line_id: string }
