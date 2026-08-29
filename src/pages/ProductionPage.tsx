@@ -110,7 +110,6 @@ export function ProductionPage() {
   if (snapshot.archivedAt) return <main className="production-page"><div className="production-error"><p>This work order is archived. Restore it before recording production.</p><Link className="button button-secondary" to={`/app/work-orders/${snapshot.workOrderId}`}><ArrowLeft size={17} /> Return to work order</Link></div></main>
 
   const missingCurrentTools = snapshot.toolCheckoutRequirements.filter((requirement) => requirement.operationRole === 'current' && !requirement.checkedOut)
-  const missingNextTools = snapshot.toolCheckoutRequirements.filter((requirement) => requirement.operationRole === 'next' && !requirement.checkedOut)
   const transferToolingBlocked = missingCurrentTools.length > 0
   const scrapToolingBlocked = missingCurrentTools.length > 0
 
@@ -175,7 +174,6 @@ export function ProductionPage() {
     {error && !modal && <div className="production-action-error" role="alert"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error"><X size={17} /></button></div>}
     <section className="production-ident"><span>{snapshot.workOrderName}</span><h1>{snapshot.partNumber}</h1><div><strong>STEP {snapshot.sequenceNumber}</strong><h2>{snapshot.routingStepName}</h2></div></section>
     {missingCurrentTools.length > 0 && <section className="production-tool-alert" role="status"><QrCode /><div><strong>Tool checkout required</strong><p>Scan each Tool Assembly QR label and complete Check Out before recording production at this operation.</p><ul>{missingCurrentTools.map((tool) => <li key={tool.toolAssemblyId}><span>{tool.assemblyNumber} · {tool.toolName}</span><small>Required for this operation</small></li>)}</ul></div></section>}
-    {missingNextTools.length > 0 && <section className="production-tool-alert production-tool-alert-warning" role="status"><QrCode /><div><strong>Upcoming tooling is not checked out</strong><p>Transfer into the next operation is allowed. Scan each Tool Assembly QR label before recording production there.</p><ul>{missingNextTools.map((tool) => <li key={tool.toolAssemblyId}><span>{tool.assemblyNumber} · {tool.toolName}</span><small>Required for OP {tool.sequenceNumber} · {tool.routingStepName}</small></li>)}</ul></div></section>}
     <section className="production-quantity"><span>AVAILABLE HERE</span><strong>{snapshot.available}</strong><small>pieces</small></section>
     <section className="production-stats"><div><span>Transferred</span><strong>{snapshot.transferred}</strong></div><div><span>Scrapped</span><strong>{snapshot.scrapped}</strong></div><div><span>Next</span><strong>{snapshot.nextStepName ?? 'Complete'}</strong></div></section>
     <section className="production-actions">

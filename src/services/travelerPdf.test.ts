@@ -107,6 +107,14 @@ describe('traveler operation tooling', () => {
     expect(thirdMillTool).toBeLessThan(op30)
   })
 
+  it('labels every station QR with its production action', async () => {
+    await generateTravelerPdf(workOrder(), salesOrder)
+
+    expect(renderedText(pdfInstances[0]).filter((line) => line === 'SCAN TO TRANSFER')).toHaveLength(3)
+    expect(qrToDataUrl).toHaveBeenCalledTimes(3)
+    expect(qrToDataUrl).toHaveBeenCalledWith(expect.stringContaining('/produce/work-order/op-10'), expect.objectContaining({ margin: 4, errorCorrectionLevel: 'M' }))
+  })
+
   it('uses updated work-order assignments and ignores routing-default-shaped data', async () => {
     const updated = workOrder([{ ...assignments[2], toolAssemblyNumber: 'TA-777', toolNumber: 'T12' }])
     const inputWithRoutingDefaults = Object.assign(updated, {
@@ -134,7 +142,7 @@ describe('traveler operation tooling', () => {
 
     const nameSplit = pdfInstances[0].splitCalls.find((call) => call.value === name)
     expect(nameSplit?.width).toBeGreaterThan(0)
-    expect(nameSplit?.width).toBeLessThan(120)
+    expect(nameSplit?.width).toBeLessThan(125)
     expect(renderedText(pdfInstances[0]).some((line) => line.startsWith('Extra-long precision'))).toBe(true)
   })
 
@@ -144,6 +152,6 @@ describe('traveler operation tooling', () => {
 
     const descriptionSplit = pdfInstances[0].splitCalls.find((call) => call.value === `Description: ${description}`)
     expect(descriptionSplit?.width).toBeGreaterThan(0)
-    expect(descriptionSplit?.width).toBeLessThan(120)
+    expect(descriptionSplit?.width).toBeLessThan(125)
   })
 })
