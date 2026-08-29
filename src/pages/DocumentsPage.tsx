@@ -8,14 +8,12 @@ import { documentTypeLabels, filterDocuments } from '../domain/documentFilters'
 import { validateDocumentPdf } from '../domain/documentSecurity'
 import type { CustomerDocument, CustomerDocumentType } from '../domain/types'
 import { env } from '../lib/env'
-import { formatDate, money } from '../lib/format'
+import { calendarDateInTimeZone, formatDate, money } from '../lib/format'
 import { getDocumentUrl, uploadDocument } from '../services/shopService'
 
 const documentTypes = Object.entries(documentTypeLabels) as Array<[CustomerDocumentType, string]>
-const today = () => new Date().toISOString().slice(0, 10)
-
 export function DocumentsPage() {
-  const { data, refresh } = useShop()
+  const { data, loading, loadMore, refresh } = useShop()
   const { profile } = useAuth()
   const fileRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -27,7 +25,7 @@ export function DocumentsPage() {
   const [previewingId, setPreviewingId] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ documentName: string; url: string } | null>(null)
   const [attested, setAttested] = useState(false)
-  const [form, setForm] = useState({ customerId: '', salesOrderId: '', documentType: 'customer_po' as CustomerDocumentType, documentName: '', documentDate: today(), amount: '' })
+  const [form, setForm] = useState({ customerId: '', salesOrderId: '', documentType: 'customer_po' as CustomerDocumentType, documentName: '', documentDate: '', amount: '' })
 
   const accessibleDocuments = useMemo(() => data?.documents.filter((document) => profile?.role === 'manufacturer' || document.customerId === profile?.customerId) ?? [], [data?.documents, profile?.customerId, profile?.role])
   const customerOptions = useMemo(() => {
@@ -40,6 +38,8 @@ export function DocumentsPage() {
   }, [accessibleDocuments, customerFilter, data?.salesOrders])
   const activeSalesOrderFilter = salesOrderFilter && salesOrderOptions.some((order) => order.id === salesOrderFilter) ? salesOrderFilter : ''
   const documents = useMemo(() => filterDocuments(accessibleDocuments, { customerId: customerFilter, salesOrderId: activeSalesOrderFilter, documentType: typeFilter }), [accessibleDocuments, activeSalesOrderFilter, customerFilter, typeFilter])
+  const customerById = useMemo(() => new Map(data?.customers.map((customer) => [customer.id, customer]) ?? []), [data?.customers])
+  const salesOrderById = useMemo(() => new Map(data?.salesOrders.map((order) => [order.id, order]) ?? []), [data?.salesOrders])
   const filtered = Boolean(customerFilter || activeSalesOrderFilter || typeFilter)
 
   const getUrl = async (filePath: string) => {
@@ -61,7 +61,7 @@ export function DocumentsPage() {
       await validateDocumentPdf(nextFile)
       setFile(nextFile)
       setAttested(false)
-      setForm({ customerId: '', salesOrderId: '', documentType: 'customer_po', documentName: nextFile.name.replace(/\.pdf$/i, ''), documentDate: today(), amount: '' })
+      setForm({ customerId: '', salesOrderId: '', documentType: 'customer_po', documentName: nextFile.name.replace(/\.pdf$/i, ''), documentDate: data ? calendarDateInTimeZone(data.organization.plantTimezone) : '', amount: '' })
       setNotice('')
     } catch (reason) {
       setNotice(reason instanceof Error ? reason.message : 'Unable to inspect the selected PDF.')
@@ -80,10 +80,11 @@ export function DocumentsPage() {
       <label>Document type<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as CustomerDocumentType | '')}><option value="">All types</option>{documentTypes.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
     </div>{filtered && <Button variant="ghost" onClick={() => { setCustomerFilter(''); setSalesOrderFilter(''); setTypeFilter('') }}><X size={15} /> Clear filters</Button>}</div>}
     {documents.length === 0 ? <EmptyState title={filtered ? 'No matching documents' : 'No customer documents'} body={filtered ? 'Clear or change the customer, PO, or type filters.' : 'Manufacturer-uploaded customer PDFs will appear here.'} /> : <section className="invoice-grid">{documents.map((document) => {
-      const order = data?.salesOrders.find((candidate) => candidate.id === document.salesOrderId)
-      const customer = data?.customers.find((candidate) => candidate.id === document.customerId)
+      const order = document.salesOrderId ? salesOrderById.get(document.salesOrderId) : undefined
+      const customer = customerById.get(document.customerId)
       return <article className="invoice-card" key={document.id}><button type="button" className="pdf-icon pdf-preview-button" aria-label={`Preview ${documentTypeLabels[document.documentType]} ${document.documentName}`} title="Preview PDF" disabled={previewingId !== null} onClick={() => void previewDocument(document)}>{previewingId === document.id ? <LoaderCircle className="spin" /> : <FileSearch />}</button><div><header><strong>{document.documentName}</strong><Badge>{documentTypeLabels[document.documentType]}</Badge></header><span>{profile?.role === 'manufacturer' ? customer?.customerName : order?.salesOrderName}</span><dl><div><dt>Document date</dt><dd>{formatDate(document.documentDate)}</dd></div>{document.documentType === 'invoice' && <div><dt>Amount</dt><dd>{document.amount == null ? '—' : money.format(document.amount)}</dd></div>}<div><dt>Customer PO</dt><dd>{order?.customerPoNumber ?? '—'}</dd></div><div><dt>Sales order</dt><dd>{order?.salesOrderName ?? '—'}</dd></div></dl></div><Button variant="secondary" onClick={() => void openDocument(document.filePath)}><Download size={17} /> Download</Button></article>
     })}</section>}
+    {data?.pageInfo?.documentsHasMore && <div className="form-actions"><Button variant="secondary" disabled={loading} onClick={() => void loadMore()}>{loading ? 'Loading…' : 'Load 100 more documents'}</Button></div>}
     {profile?.role === 'manufacturer' && <section className="document-safety-grid" aria-label="Document upload safeguards and portal terms">
       <div className="upload-guidance"><Upload /><div><strong>Manufacturer-only, private PDF uploads</strong><p>Files stay in a non-public bucket, links expire after 60 seconds, and RLS limits each document by organization and customer. PDF signature and active-content checks provide an additional upload safeguard.</p></div></div>
       <article className="portal-terms"><header><ShieldCheck /><div><strong>Portal document terms</strong><span>Operational terms — legal review recommended</span></div></header><p>By using document storage, the manufacturer is responsible for uploading only authorized customer-facing PDFs, choosing the correct customer and order, and excluding executable code, scripts, embedded files, malware, or another customer’s information. Documents are reference copies; QuickBooks remains the accounting system of record for invoices.</p><p>These operational terms are a product safeguard, not a substitute for your company’s counsel-approved portal terms, privacy policy, retention policy, or malware-scanning process.</p></article>

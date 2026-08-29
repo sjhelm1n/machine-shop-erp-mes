@@ -1,12 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import { demoData } from '../data/demoData'
 import type { ProductionEvent, Question, ShopData } from '../domain/types'
 import { calculateStepMetrics } from '../domain/routing'
 import { nextChronologicalNumber } from '../domain/orderNumbers'
-import { appendQuestionReply } from '../domain/questions'
+import { appendQuestionReply, plainTextQuestionMessage, salesOrderConversationLifecycle } from '../domain/questions'
 import { env } from '../lib/env'
-import { sanitizePlainText } from '../lib/format'
-import { addSalesOrderLine as addSalesOrderLineRecord, createCustomer, createSalesOrder, createWorkOrder, loadShopData, markSalesOrderMilestone, recordProductionAdjustment, recordProductionEvent, reverseProductionEvent, sendQuestion, setSalesOrderArchived as setSalesOrderArchivedRecord, setSalesOrderLineArchived as setSalesOrderLineArchivedRecord, setWorkOrderArchived as setWorkOrderArchivedRecord, updateCustomer, updateSalesOrderLine, type CustomerInput, type SalesOrderInput, type SalesOrderLineInput, type WorkOrderInput } from '../services/shopService'
+import { calendarDateInTimeZone } from '../lib/format'
+import { addSalesOrderLine as addSalesOrderLineRecord, createCustomer, createSalesOrder, createWorkOrder, loadShopData, markSalesOrderMilestone, recordProductionAdjustment, recordProductionEvent, reverseProductionEvent, saveRoutingTemplate as saveRoutingTemplateRecord, sendQuestion, setRoutingTemplateArchived as setRoutingTemplateArchivedRecord, setSalesOrderArchived as setSalesOrderArchivedRecord, setSalesOrderLineArchived as setSalesOrderLineArchivedRecord, setWorkOrderArchived as setWorkOrderArchivedRecord, updateCustomer, updateSalesOrderLine, updateWorkOrder as updateWorkOrderRecord, type CustomerInput, type RoutingTemplateInput, type SalesOrderInput, type SalesOrderLineInput, type WorkOrderInput, type WorkOrderUpdateInput } from '../services/shopService'
 import { useAuth } from './AuthContext'
 
 interface ShopValue {
@@ -16,6 +17,7 @@ interface ShopValue {
   notice: string | null
   lastEventId: string | null
   refresh: () => Promise<void>
+  loadMore: () => Promise<void>
   transact: (input: { workOrderId: string; routingStepId: string; eventType: 'transfer' | 'scrap'; quantity: number; toRoutingStepId: string | null }) => Promise<void>
   undoLast: () => Promise<void>
   addQuestion: (input: { customerId: string; salesOrderId: string | null; message: string }) => Promise<void>
@@ -27,7 +29,10 @@ interface ShopValue {
   setSalesOrderLineArchived: (lineId: string, archived: boolean) => Promise<void>
   setSalesOrderArchived: (salesOrderId: string, archived: boolean) => Promise<void>
   setWorkOrderArchived: (workOrderId: string, archived: boolean) => Promise<void>
+  editWorkOrder: (input: WorkOrderUpdateInput) => Promise<void>
   markOrderMilestone: (salesOrderId: string, milestone: 'shipped' | 'invoiced') => Promise<void>
+  saveRoutingTemplate: (input: RoutingTemplateInput) => Promise<void>
+  setRoutingTemplateArchived: (templateId: string, archived: boolean) => Promise<void>
   addWorkOrder: (input: WorkOrderInput) => Promise<void>
   addProductionAdjustment: (input: { workOrderId: string; routingStepId: string; quantity: number }) => Promise<void>
   clearNotice: () => void
@@ -43,45 +48,92 @@ function updateDemoCompletions(current: ShopData, productionEvents: ProductionEv
       const metrics = calculateStepMetrics(workOrder, productionEvents)
       const final = metrics.at(-1)
       const complete = metrics.length > 0 && metrics.every((metric) => metric.available === 0) && (final?.transferred ?? 0) >= workOrder.quantityOrdered
-      return { ...workOrder, completionDate: complete ? workOrder.completionDate ?? new Date().toISOString().slice(0, 10) : null }
+      return { ...workOrder, completionDate: complete ? workOrder.completionDate ?? calendarDateInTimeZone(current.organization.plantTimezone) : null }
     }),
   }
 }
 
 export function ShopProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth()
+  const { pathname } = useLocation()
   const profileId = profile?.id ?? null
   const profileRole = profile?.role ?? null
+  const profileScope = profile ? `${profile.id}:${profile.organizationId}:${profile.customerId ?? ''}:${profile.role}` : null
+  const productionRoute = pathname.startsWith('/produce/')
   const [data, setData] = useState<ShopData | null>(env.demoMode ? structuredClone(demoData) : null)
   const [loading, setLoading] = useState(!env.demoMode)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [lastEventId, setLastEventId] = useState<string | null>(null)
+  const dataLimit = useRef(100)
+  const pendingRequestIds = useRef(new Map<string, string>())
+  const activeProfileScope = useRef(profileScope)
+
+  const requestIdFor = (operation: string, input: unknown) => {
+    const key = `${operation}:${JSON.stringify(input)}`
+    const existing = pendingRequestIds.current.get(key)
+    if (existing) return { key, requestId: existing }
+    const requestId = crypto.randomUUID()
+    pendingRequestIds.current.set(key, requestId)
+    return { key, requestId }
+  }
+
+  const completeRequest = (key: string) => pendingRequestIds.current.delete(key)
 
   const refresh = useCallback(async () => {
-    if (env.demoMode || !profileId || !profileRole) return
+    if (env.demoMode || productionRoute || !profileId || !profileRole) return
     setLoading(true)
-    try { setData(await loadShopData(profileRole)); setError(null) }
+    try { setData(await loadShopData(profileRole, dataLimit.current)); setError(null) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to load shop data.') }
     finally { setLoading(false) }
-  }, [profileId, profileRole])
+  }, [productionRoute, profileId, profileRole])
+
+  const loadMore = useCallback(async () => {
+    if (env.demoMode || productionRoute || !profileId || !profileRole) return
+    const nextLimit = dataLimit.current + 100
+    setLoading(true)
+    try {
+      setData(await loadShopData(profileRole, nextLimit))
+      dataLimit.current = nextLimit
+      setError(null)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to load more shop data.')
+    } finally {
+      setLoading(false)
+    }
+  }, [productionRoute, profileId, profileRole])
 
   useEffect(() => {
-    setError(null)
-    setNotice(null)
-    setLastEventId(null)
+    const profileChanged = activeProfileScope.current !== profileScope
+    activeProfileScope.current = profileScope
+
+    if (profileChanged) {
+      dataLimit.current = 100
+      pendingRequestIds.current.clear()
+      setError(null)
+      setNotice(null)
+      setLastEventId(null)
+      setData(env.demoMode && profileScope ? structuredClone(demoData) : null)
+    }
+
     if (env.demoMode) {
-      setData(structuredClone(demoData))
       setLoading(false)
       return
     }
-    setData(null)
-    if (!profileId) {
+
+    if (!profileScope) {
+      setData(null)
       setLoading(false)
       return
     }
+
+    if (productionRoute) {
+      setLoading(false)
+      return
+    }
+
     void refresh()
-  }, [profileId, profileRole, refresh])
+  }, [productionRoute, profileScope, refresh])
 
   const transact: ShopValue['transact'] = async (input) => {
     if (!data || !profile) return
@@ -93,12 +145,14 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         routingStepId: input.routingStepId, eventType: input.eventType, quantity: input.quantity,
         fromRoutingStepId: input.eventType === 'transfer' ? input.routingStepId : null,
         toRoutingStepId: input.eventType === 'transfer' ? input.toRoutingStepId : null,
-        reversedEventId: null, createdAt: new Date().toISOString(),
+        reversedEventId: null, actorId: profile.id, requestId: crypto.randomUUID(), createdAt: new Date().toISOString(),
       }
       setData((current) => current ? updateDemoCompletions(current, [...current.productionEvents, event]) : current)
       setLastEventId(event.id)
     } else {
-      const event = await recordProductionEvent(input)
+      const request = requestIdFor('production-event', input)
+      const event = await recordProductionEvent({ ...input, requestId: request.requestId })
+      completeRequest(request.key)
       setLastEventId(event.id)
       await refresh()
     }
@@ -109,7 +163,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     if (!lastEventId) return
     if (env.demoMode) {
       setData((current) => current ? updateDemoCompletions(current, [...current.productionEvents, {
-        id: crypto.randomUUID(), organizationId: current.organization.id, workOrderId: current.productionEvents.find((event) => event.id === lastEventId)?.workOrderId ?? '', routingStepId: current.productionEvents.find((event) => event.id === lastEventId)?.routingStepId ?? '', eventType: 'reversal', quantity: current.productionEvents.find((event) => event.id === lastEventId)?.quantity ?? 0, fromRoutingStepId: null, toRoutingStepId: null, reversedEventId: lastEventId, createdAt: new Date().toISOString(),
+        id: crypto.randomUUID(), organizationId: current.organization.id, workOrderId: current.productionEvents.find((event) => event.id === lastEventId)?.workOrderId ?? '', routingStepId: current.productionEvents.find((event) => event.id === lastEventId)?.routingStepId ?? '', eventType: 'reversal', quantity: current.productionEvents.find((event) => event.id === lastEventId)?.quantity ?? 0, fromRoutingStepId: null, toRoutingStepId: null, reversedEventId: lastEventId, actorId: profile?.id ?? null, requestId: null, createdAt: new Date().toISOString(),
       }]) : current)
     } else {
       await reverseProductionEvent(lastEventId)
@@ -121,8 +175,11 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 
   const addQuestion: ShopValue['addQuestion'] = async (input) => {
     if (!data || !profile) return
-    const message = sanitizePlainText(input.message)
-    if (!message) throw new Error('Enter a plain-text message.')
+    const order = input.salesOrderId ? data.salesOrders.find((candidate) => candidate.id === input.salesOrderId) : undefined
+    if (order && salesOrderConversationLifecycle(order, data.workOrders, data.productionEvents, data.organization.plantTimezone).archived) {
+      throw new Error('This conversation was archived seven days after the sales order closed.')
+    }
+    const message = plainTextQuestionMessage(input.message)
     const next: Question = { id: crypto.randomUUID(), organizationId: profile.organizationId, customerId: input.customerId, salesOrderId: input.salesOrderId, senderType: profile.role, message, createdAt: new Date().toISOString(), readAt: null }
     if (env.demoMode) setData((current) => current ? { ...current, questions: appendQuestionReply(current.questions, next) } : current)
     else { await sendQuestion(next); await refresh() }
@@ -152,7 +209,12 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         const salesOrderName = input.salesOrderName.trim() || salesOrderNumber
         return { ...current, salesOrders: [{ id, organizationId: input.organizationId, salesOrderNumber, salesOrderName, customerId: input.customerId, customerName: input.customerName, customerAddress: input.customerAddress, customerPoNumber: input.customerPoNumber, shipToAddress: input.shipToAddress, billToAddress: input.billToAddress, dateReceived: input.dateReceived, orderDueDate: input.orderDueDate, shippedAt: null, invoicedAt: null, archivedAt: null, notes: input.notes, lines: input.lines.map((line) => ({ id: crypto.randomUUID(), salesOrderId: id, lineNumber: line.lineNumber, partNumber: line.partNumber, description: line.description, manufacturedItem: line.manufacturedItem, pricingType: line.pricingType, quantity: line.quantity, unitPrice: line.unitPrice, flatRateAmount: line.flatRateAmount, lineTotal: line.pricingType === 'per_piece' ? line.quantity * (line.unitPrice ?? 0) : line.flatRateAmount ?? 0, sortOrder: line.sortOrder, archivedAt: null })) }, ...current.salesOrders] }
       })
-    } else { await createSalesOrder(input); await refresh() }
+    } else {
+      const request = requestIdFor('create-sales-order', input)
+      await createSalesOrder(input, request.requestId)
+      completeRequest(request.key)
+      await refresh()
+    }
     setNotice('Sales order created')
   }
 
@@ -179,7 +241,9 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         }
       })
     } else {
-      await addSalesOrderLineRecord(salesOrderId, input)
+      const request = requestIdFor('add-sales-order-line', { salesOrderId, input })
+      await addSalesOrderLineRecord(salesOrderId, input, request.requestId)
+      completeRequest(request.key)
       await refresh()
     }
     setNotice('Line item added')
@@ -236,11 +300,63 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     setNotice(archived ? 'Work order archived' : 'Work order restored')
   }
 
+  const editWorkOrder: ShopValue['editWorkOrder'] = async (input) => {
+    if (!data || profile?.role !== 'manufacturer') throw new Error('Only shop users can edit work orders.')
+    const workOrder = data.workOrders.find((candidate) => candidate.id === input.workOrderId)
+    if (!workOrder) throw new Error('Work order not found or access denied.')
+    if (workOrder.archivedAt) throw new Error('Restore the work order before editing it.')
+    if (!input.dueDate) throw new Error('Enter a due date.')
+    if (input.routing.length < workOrder.routing.length) throw new Error('Existing routing steps cannot be removed.')
+    if (input.routing.some((step) => !step.name.trim() || !step.customerStageName.trim())) throw new Error('Every routing step needs an internal step and customer stage.')
+
+    const existingIds = new Set(workOrder.routing.map((step) => step.id))
+    const submittedIds = new Set(input.routing.map((step) => step.id))
+    if (submittedIds.size !== input.routing.length || workOrder.routing.some((step) => !submittedIds.has(step.id))) throw new Error('Every routing step requires a unique id and existing steps cannot be removed.')
+
+    const metrics = calculateStepMetrics(workOrder, data.productionEvents)
+    const submittedIndexById = new Map(input.routing.map((step, index) => [step.id, index]))
+    for (const existing of workOrder.routing) {
+      const submitted = input.routing.find((step) => step.id === existing.id)!
+      const entered = Boolean(metrics.find((metric) => metric.stepId === existing.id)?.enteredAt)
+      const changed = existing.routingStepName !== submitted.name.trim() || existing.customerStageName !== submitted.customerStageName.trim() || existing.workInstructions !== submitted.instructions
+      if (entered && changed) throw new Error(`Routing step ${existing.sequenceNumber} has already been entered and cannot be changed.`)
+      if (entered && submittedIndexById.get(existing.id) !== workOrder.routing.findIndex((step) => step.id === existing.id)) throw new Error('Routing steps that have received quantity cannot be reordered.')
+    }
+
+    const hasNewSteps = input.routing.some((step) => !existingIds.has(step.id))
+    const hasFinalExit = (metrics.at(-1)?.transferred ?? 0) > 0
+    if (hasNewSteps && workOrder.completionDate) throw new Error('Routing steps cannot be added to a completed work order.')
+    if (hasNewSteps && hasFinalExit) throw new Error('Routing steps cannot be added after quantity has exited the final step.')
+
+    if (env.demoMode) {
+      setData((current) => current ? {
+        ...current,
+        workOrders: current.workOrders.map((candidate) => {
+          if (candidate.id !== input.workOrderId) return candidate
+          return {
+            ...candidate,
+            dueDate: input.dueDate,
+            notes: input.notes,
+            routing: input.routing.map((step, index) => {
+              const existing = candidate.routing.find((routeStep) => routeStep.id === step.id)
+              if (existing) return { ...existing, sequenceNumber: (index + 1) * 10, routingStepName: step.name.trim(), customerStageName: step.customerStageName.trim(), workInstructions: step.instructions }
+              return { id: step.id, workOrderId: candidate.id, sequenceNumber: (index + 1) * 10, routingStepName: step.name.trim(), customerStageName: step.customerStageName.trim(), workInstructions: step.instructions, notes: '' }
+            }),
+          }
+        }),
+      } : current)
+    } else {
+      await updateWorkOrderRecord(input)
+      await refresh()
+    }
+    setNotice('Work order updated')
+  }
+
   const markOrderMilestone: ShopValue['markOrderMilestone'] = async (salesOrderId, milestone) => {
     if (profile?.role !== 'manufacturer') throw new Error('Only manufacturer users can update order fulfillment.')
     if (data?.salesOrders.find((order) => order.id === salesOrderId)?.archivedAt) throw new Error('Restore the sales order before updating fulfillment.')
-    const timestamp = new Date().toISOString()
     if (env.demoMode) {
+      const timestamp = new Date().toISOString()
       setData((current) => current ? {
         ...current,
         salesOrders: current.salesOrders.map((order) => order.id === salesOrderId
@@ -248,10 +364,49 @@ export function ShopProvider({ children }: { children: ReactNode }) {
           : order),
       } : current)
     } else {
-      await markSalesOrderMilestone(salesOrderId, milestone)
-      await refresh()
+      const timestamp = await markSalesOrderMilestone(salesOrderId, milestone)
+      setData((current) => current ? {
+        ...current,
+        salesOrders: current.salesOrders.map((order) => order.id === salesOrderId
+          ? { ...order, [milestone === 'shipped' ? 'shippedAt' : 'invoicedAt']: timestamp }
+          : order),
+      } : current)
     }
     setNotice(milestone === 'shipped' ? 'Sales order marked shipped' : 'Sales order marked invoiced')
+  }
+
+  const saveRoutingTemplate: ShopValue['saveRoutingTemplate'] = async (input) => {
+    if (profile?.role !== 'manufacturer' || input.organizationId !== profile.organizationId) throw new Error('Only shop users can save routing templates for their organization.')
+    const templateName = input.templateName.trim()
+    if (!templateName) throw new Error('Enter a template name.')
+    if (input.steps.length === 0) throw new Error('Add at least one routing step.')
+    if (input.steps.some((step) => !step.name.trim() || !step.customerStageName.trim())) throw new Error('Every routing step needs an internal step and customer stage.')
+    if (env.demoMode) {
+      setData((current) => {
+        if (!current) return current
+        const existing = current.routingTemplates.find((template) => template.id === input.id)
+        const saved = {
+          id: input.id,
+          organizationId: input.organizationId,
+          templateName,
+          archivedAt: existing?.archivedAt ?? null,
+          steps: input.steps.map((step, index) => ({ id: crypto.randomUUID(), routingTemplateId: input.id, sequenceNumber: (index + 1) * 10, routingStepName: step.name.trim(), customerStageName: step.customerStageName.trim(), workInstructions: step.instructions })),
+        }
+        return { ...current, routingTemplates: existing ? current.routingTemplates.map((template) => template.id === input.id ? saved : template) : [...current.routingTemplates, saved] }
+      })
+    } else {
+      await saveRoutingTemplateRecord({ ...input, templateName })
+      await refresh()
+    }
+    setNotice('Routing template saved')
+  }
+
+  const setRoutingTemplateArchived: ShopValue['setRoutingTemplateArchived'] = async (templateId, archived) => {
+    if (profile?.role !== 'manufacturer') throw new Error('Only shop users can archive routing templates.')
+    const archivedAt = archived ? new Date().toISOString() : null
+    if (env.demoMode) setData((current) => current ? { ...current, routingTemplates: current.routingTemplates.map((template) => template.id === templateId ? { ...template, archivedAt } : template) } : current)
+    else { await setRoutingTemplateArchivedRecord(templateId, archived); await refresh() }
+    setNotice(archived ? 'Routing template archived' : 'Routing template restored')
   }
 
   const addWorkOrder: ShopValue['addWorkOrder'] = async (input) => {
@@ -267,9 +422,14 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         if (!current) return current
         const workOrderNumber = nextChronologicalNumber(current.workOrders.filter((workOrder) => workOrder.organizationId === input.organizationId).map((workOrder) => workOrder.workOrderNumber), 6)
         const workOrderName = input.workOrderName.trim() || workOrderNumber
-        return { ...current, workOrders: [...current.workOrders, { id, organizationId: input.organizationId, workOrderNumber, workOrderName, salesOrderId: input.salesOrderId, salesOrderLineItemId: input.salesOrderLineItemId, partNumber: input.partNumber, quantityOrdered: input.quantityOrdered, dueDate: input.dueDate, releasedAt, completionDate: null, archivedAt: null, notes: input.notes, routing }], productionEvents: [...current.productionEvents, { id: crypto.randomUUID(), organizationId: input.organizationId, workOrderId: id, routingStepId: firstStepId, eventType: 'release', quantity: input.quantityOrdered, fromRoutingStepId: null, toRoutingStepId: firstStepId, reversedEventId: null, createdAt: releasedAt }] }
+        return { ...current, workOrders: [...current.workOrders, { id, organizationId: input.organizationId, workOrderNumber, workOrderName, salesOrderId: input.salesOrderId, salesOrderLineItemId: input.salesOrderLineItemId, partNumber: input.partNumber, quantityOrdered: input.quantityOrdered, dueDate: input.dueDate, releasedAt, completionDate: null, archivedAt: null, notes: input.notes, routing }], productionEvents: [...current.productionEvents, { id: crypto.randomUUID(), organizationId: input.organizationId, workOrderId: id, routingStepId: firstStepId, eventType: 'release', quantity: input.quantityOrdered, fromRoutingStepId: null, toRoutingStepId: firstStepId, reversedEventId: null, actorId: profile?.id ?? null, requestId: null, createdAt: releasedAt }] }
       })
-    } else { await createWorkOrder(input); await refresh() }
+    } else {
+      const request = requestIdFor('create-work-order', input)
+      await createWorkOrder(input, request.requestId)
+      completeRequest(request.key)
+      await refresh()
+    }
     setNotice('Work order released')
   }
 
@@ -277,13 +437,18 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     if (!data || !profile || !Number.isInteger(input.quantity) || input.quantity <= 0) throw new Error('Enter a whole quantity greater than zero.')
     if (data.workOrders.find((workOrder) => workOrder.id === input.workOrderId)?.archivedAt) throw new Error('Restore the work order before recording production.')
     if (env.demoMode) {
-      const event: ProductionEvent = { id: crypto.randomUUID(), organizationId: profile.organizationId, workOrderId: input.workOrderId, routingStepId: input.routingStepId, eventType: 'adjustment', quantity: input.quantity, fromRoutingStepId: null, toRoutingStepId: input.routingStepId, reversedEventId: null, createdAt: new Date().toISOString() }
+      const event: ProductionEvent = { id: crypto.randomUUID(), organizationId: profile.organizationId, workOrderId: input.workOrderId, routingStepId: input.routingStepId, eventType: 'adjustment', quantity: input.quantity, fromRoutingStepId: null, toRoutingStepId: input.routingStepId, reversedEventId: null, actorId: profile.id, requestId: crypto.randomUUID(), createdAt: new Date().toISOString() }
       setData((current) => current ? updateDemoCompletions(current, [...current.productionEvents, event]) : current)
-    } else { await recordProductionAdjustment(input); await refresh() }
+    } else {
+      const request = requestIdFor('production-adjustment', input)
+      await recordProductionAdjustment({ ...input, requestId: request.requestId })
+      completeRequest(request.key)
+      await refresh()
+    }
     setNotice(`Added ${input.quantity} overrun piece${input.quantity === 1 ? '' : 's'}`)
   }
 
-  const value: ShopValue = { data, loading, error, notice, lastEventId, refresh, transact, undoLast, addQuestion, addCustomer, editCustomer, addSalesOrder, addSalesOrderLine, editSalesOrderLine, setSalesOrderLineArchived, setSalesOrderArchived, setWorkOrderArchived, markOrderMilestone, addWorkOrder, addProductionAdjustment, clearNotice: () => setNotice(null) }
+  const value: ShopValue = { data, loading, error, notice, lastEventId, refresh, loadMore, transact, undoLast, addQuestion, addCustomer, editCustomer, addSalesOrder, addSalesOrderLine, editSalesOrderLine, setSalesOrderLineArchived, setSalesOrderArchived, setWorkOrderArchived, editWorkOrder, markOrderMilestone, saveRoutingTemplate, setRoutingTemplateArchived, addWorkOrder, addProductionAdjustment, clearNotice: () => setNotice(null) }
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>
 }
 

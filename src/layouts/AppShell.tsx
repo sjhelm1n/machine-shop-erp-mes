@@ -1,4 +1,4 @@
-import { ChevronDown, ClipboardList, Factory, Files, HelpCircle, LayoutDashboard, LogOut, Menu, MonitorCheck, PackageCheck, Users, X } from 'lucide-react'
+import { ChevronDown, ClipboardList, Factory, Files, HelpCircle, LayoutDashboard, LogOut, Menu, MonitorCheck, PackageCheck, Route as RouteIcon, Users, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -18,6 +18,7 @@ const manufacturerNav: NavItem[] = [
   { to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/app/sales-orders', label: 'Sales orders', icon: ClipboardList },
   { to: '/app/work-orders', label: 'Work orders', icon: Factory },
+  { to: '/app/routing', label: 'Routing', icon: RouteIcon },
   {
     to: '/app/customers',
     label: 'Customers',

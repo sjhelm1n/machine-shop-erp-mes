@@ -3,21 +3,32 @@ import { Link } from 'react-router-dom'
 import { PageHeader, ProgressBar, StatCard } from '../components/Ui'
 import { useShop } from '../context/ShopContext'
 import { useAuth } from '../context/AuthContext'
-import { isSalesOrderCompleted, workOrderProgress } from '../domain/routing'
-import { daysUntil, formatDate } from '../lib/format'
+import { salesOrderProgress, workOrderProgress } from '../domain/routing'
+import { daysUntil, formatDate, hourInTimeZone } from '../lib/format'
+import { DashboardVisualizations } from '../components/DashboardVisualizations'
 
 export function DashboardPage() {
   const { data } = useShop()
   const { profile } = useAuth()
   if (!data) return null
+  const plantTimezone = data.organization.plantTimezone
+  const plantHour = hourInTimeZone(plantTimezone)
   const openWorkOrders = data.workOrders.filter((workOrder) => !workOrder.archivedAt && !workOrder.completionDate)
-  const overdue = openWorkOrders.filter((workOrder) => daysUntil(workOrder.dueDate) < 0)
-  const dueSoon = openWorkOrders.filter((workOrder) => daysUntil(workOrder.dueDate) >= 0 && daysUntil(workOrder.dueDate) <= 7)
+  const dueDays = new Map(openWorkOrders.map((workOrder) => [workOrder.id, daysUntil(workOrder.dueDate, plantTimezone)]))
+  const salesOrderById = new Map(data.salesOrders.map((order) => [order.id, order]))
+  const workOrdersBySalesOrder = new Map<string, typeof data.workOrders>()
+  for (const workOrder of data.workOrders) {
+    const related = workOrdersBySalesOrder.get(workOrder.salesOrderId)
+    if (related) related.push(workOrder)
+    else workOrdersBySalesOrder.set(workOrder.salesOrderId, [workOrder])
+  }
+  const overdue = openWorkOrders.filter((workOrder) => (dueDays.get(workOrder.id) ?? 0) < 0)
+  const dueSoon = openWorkOrders.filter((workOrder) => (dueDays.get(workOrder.id) ?? 0) >= 0 && (dueDays.get(workOrder.id) ?? 0) <= 7)
   const unanswered = data.questions.filter((question) => question.senderType === 'customer' && !question.readAt)
   return <main className="page dashboard-page">
-    <PageHeader eyebrow={new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())} title={`${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}, ${profile?.displayName.split(' ')[0] ?? 'team'}`} description="Here’s what needs attention across the shop." />
+    <PageHeader eyebrow={new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: plantTimezone }).format(new Date())} title={`${plantHour < 12 ? 'Good morning' : plantHour < 18 ? 'Good afternoon' : 'Good evening'}, ${profile?.displayName.split(' ')[0] ?? 'team'}`} description="Here’s what needs attention across the shop." />
     <section className="stats-grid">
-      <StatCard label="Open sales orders" value={data.salesOrders.filter((order) => !order.archivedAt && !isSalesOrderCompleted(order, data.workOrders, data.productionEvents)).length} detail="Across active customers" href="/app/sales-orders" />
+      <StatCard label="Open sales orders" value={data.salesOrders.filter((order) => !order.archivedAt && !(salesOrderProgress(workOrdersBySalesOrder.get(order.id) ?? [], data.productionEvents, order.id) === 100 && order.shippedAt && order.invoicedAt)).length} detail="Across active customers" href="/app/sales-orders" />
       <StatCard label="Open work orders" value={openWorkOrders.length} detail={`${dueSoon.length} due in 7 days`} href="/app/work-orders" />
       <StatCard label="Past due" value={overdue.length} detail={overdue.length ? 'Needs attention' : 'Nothing past due'} tone={overdue.length ? 'danger' : 'success'} href="/app/work-orders" />
       <StatCard label="Unanswered questions" value={unanswered.length} detail={unanswered.length ? 'Customer is waiting' : 'Inbox is clear'} tone={unanswered.length ? 'danger' : 'success'} href="/app/questions" />
@@ -27,9 +38,9 @@ export function DashboardPage() {
         <div className="panel-header"><div><span className="eyebrow">Production</span><h2>Work orders due soon</h2></div><Link to="/app/work-orders">View all <ArrowRight size={16} /></Link></div>
         <div className="work-list">
           {openWorkOrders.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map((workOrder) => {
-            const order = data.salesOrders.find((candidate) => candidate.id === workOrder.salesOrderId)
+            const order = salesOrderById.get(workOrder.salesOrderId)
             const progress = workOrderProgress(workOrder, data.productionEvents)
-            const remaining = daysUntil(workOrder.dueDate)
+            const remaining = dueDays.get(workOrder.id) ?? 0
             return <Link to={`/app/work-orders/${workOrder.id}`} className="work-list-row" key={workOrder.id}>
               <div className="work-id"><strong>{workOrder.workOrderName}</strong><span>{workOrder.partNumber}</span></div>
               <div className="work-customer"><strong>{order?.customerName}</strong><span>{workOrder.quantityOrdered} pieces</span></div>
@@ -48,5 +59,6 @@ export function DashboardPage() {
         })}
       </section>
     </div>
+    <DashboardVisualizations data={data} />
   </main>
 }

@@ -1,16 +1,6 @@
-import type { ProductionEvent, RoutingStep, SalesOrder, WorkOrder } from './types'
+import type { ProductionEvent, RoutingStep, SalesOrder, StepMetrics, WorkOrder } from './types'
 
-export interface StepMetrics {
-  stepId: string
-  entered: number
-  transferred: number
-  scrapped: number
-  available: number
-  processed: number
-  enteredAt: string | null
-  startedAt: string | null
-  completedAt: string | null
-}
+export type { StepMetrics } from './types'
 
 export interface WorkOrderStageBreakdown {
   stageName: string
@@ -27,53 +17,73 @@ export function activeProductionEvents(events: ProductionEvent[]): ProductionEve
 
 export function calculateStepMetrics(workOrder: WorkOrder, events: ProductionEvent[]): StepMetrics[] {
   const orderedSteps = [...workOrder.routing].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+  if (workOrder.stepMetrics) {
+    const metricsByStep = new Map(workOrder.stepMetrics.map((metric) => [metric.stepId, metric]))
+    return orderedSteps.flatMap((step) => {
+      const metric = metricsByStep.get(step.id)
+      return metric ? [metric] : []
+    })
+  }
   const active = activeProductionEvents(events.filter((event) => event.workOrderId === workOrder.id))
 
-  const base = orderedSteps.map((step, index) => {
-    const inbound = active.filter(
-      (event) =>
-        (event.eventType === 'release' || event.eventType === 'adjustment') && event.routingStepId === step.id ||
-        event.eventType === 'transfer' && event.toRoutingStepId === step.id,
-    )
-    const outbound = active.filter(
-      (event) => event.eventType === 'transfer' && event.fromRoutingStepId === step.id,
-    )
-    const scraps = active.filter((event) => event.eventType === 'scrap' && event.routingStepId === step.id)
-    const entered = inbound.reduce((sum, event) => sum + event.quantity, 0)
-    const transferred = outbound.reduce((sum, event) => sum + event.quantity, 0)
-    const scrapped = scraps.reduce((sum, event) => sum + event.quantity, 0)
-    const activity = [...outbound, ...scraps].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-    const enteredEvents = inbound.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  const lastActivityByStep = new Map<string, string>()
+  const base: StepMetrics[] = orderedSteps.map((step, index) => ({
+    stepId: step.id,
+    entered: 0,
+    transferred: 0,
+    scrapped: 0,
+    available: 0,
+    processed: 0,
+    enteredAt: index === 0 ? workOrder.releasedAt : null,
+    startedAt: null,
+    completedAt: null,
+  }))
+  const metricsByStep = new Map(base.map((metric) => [metric.stepId, metric]))
+  const earliest = (current: string | null, candidate: string) => !current || candidate < current ? candidate : current
+  const latest = (current: string | undefined, candidate: string) => !current || candidate > current ? candidate : current
 
-    return {
-      stepId: step.id,
-      entered,
-      transferred,
-      scrapped,
-      available: Math.max(0, entered - transferred - scrapped),
-      processed: transferred + scrapped,
-      enteredAt: enteredEvents[0]?.createdAt ?? (index === 0 ? workOrder.releasedAt : null),
-      startedAt: activity[0]?.createdAt ?? null,
-      completedAt: null,
-    } satisfies StepMetrics
-  })
-
-  return base.map((metric, index) => {
-    const upstreamEmpty = base.slice(0, index).every((candidate) => candidate.available === 0)
-    const hasEntered = metric.entered > 0
-    if (hasEntered && metric.available === 0 && upstreamEmpty && metric.startedAt) {
-      const relevant = active
-        .filter(
-          (event) =>
-            event.routingStepId === metric.stepId ||
-            event.fromRoutingStepId === metric.stepId ||
-            event.toRoutingStepId === metric.stepId,
-        )
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      return { ...metric, completedAt: relevant[0]?.createdAt ?? null }
+  for (const event of active) {
+    if (event.eventType === 'release' || event.eventType === 'adjustment') {
+      const metric = metricsByStep.get(event.routingStepId)
+      if (metric) {
+        metric.entered += event.quantity
+        metric.enteredAt = earliest(metric.enteredAt, event.createdAt)
+      }
+    } else if (event.eventType === 'transfer') {
+      const outbound = event.fromRoutingStepId ? metricsByStep.get(event.fromRoutingStepId) : undefined
+      if (outbound) {
+        outbound.transferred += event.quantity
+        outbound.startedAt = earliest(outbound.startedAt, event.createdAt)
+      }
+      const inbound = event.toRoutingStepId ? metricsByStep.get(event.toRoutingStepId) : undefined
+      if (inbound) {
+        inbound.entered += event.quantity
+        inbound.enteredAt = earliest(inbound.enteredAt, event.createdAt)
+      }
+    } else if (event.eventType === 'scrap') {
+      const metric = metricsByStep.get(event.routingStepId)
+      if (metric) {
+        metric.scrapped += event.quantity
+        metric.startedAt = earliest(metric.startedAt, event.createdAt)
+      }
     }
-    return metric
-  })
+
+    const relatedStepIds = new Set([event.routingStepId, event.fromRoutingStepId, event.toRoutingStepId])
+    for (const stepId of relatedStepIds) {
+      if (stepId && metricsByStep.has(stepId)) lastActivityByStep.set(stepId, latest(lastActivityByStep.get(stepId), event.createdAt))
+    }
+  }
+
+  let upstreamEmpty = true
+  for (const metric of base) {
+    metric.available = Math.max(0, metric.entered - metric.transferred - metric.scrapped)
+    metric.processed = metric.transferred + metric.scrapped
+    if (metric.entered > 0 && metric.available === 0 && upstreamEmpty && metric.startedAt) {
+      metric.completedAt = lastActivityByStep.get(metric.stepId) ?? null
+    }
+    upstreamEmpty = upstreamEmpty && metric.available === 0
+  }
+  return base
 }
 
 export function workOrderProgress(workOrder: WorkOrder, events: ProductionEvent[]): number {

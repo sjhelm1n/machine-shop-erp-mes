@@ -65,5 +65,5 @@ export function UpdatePasswordPage() {
 }
 
 function AuthFrame({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
-  return <main className="auth-page"><div className="auth-brand"><img className="auth-logo" src="/brand/shopcore-mark.png" alt="" aria-hidden="true" /><strong>ShopCore ERP</strong><span>Lightweight shop operations</span></div><section className="auth-card"><h1>{title}</h1><p>{subtitle}</p>{children}</section><footer>Paper communicates the work. Digital captures the flow.</footer></main>
+  return <main className="auth-page"><div className="auth-brand"><img className="auth-logo" src="/brand/shopcore-mark.png" alt="" aria-hidden="true" /><strong>ShopCore ERP</strong><span>Lightweight shop operations</span></div><section className="auth-card"><h1>{title}</h1><p>{subtitle}</p>{children}</section><footer>The core, the essentials, of an ERP</footer></main>
 }

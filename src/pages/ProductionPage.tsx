@@ -1,49 +1,160 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, Minus, PackageCheck, RotateCcw, TriangleAlert, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Button, Modal } from '../components/Ui'
 import { useShop } from '../context/ShopContext'
 import { calculateStepMetrics, canTransfer, getNextStep } from '../domain/routing'
+import type { ProductionStepSnapshot } from '../domain/types'
+import { env } from '../lib/env'
+import { loadProductionStep, recordProductionEvent, reverseProductionEvent } from '../services/shopService'
+
+type ProductionAction = 'transfer' | 'scrap'
 
 export function ProductionPage() {
   const { workOrderId, stepId } = useParams()
-  const { data, loading, error: loadError, transact, undoLast, notice, clearNotice, lastEventId } = useShop()
-  const [modal, setModal] = useState<'transfer' | 'scrap' | null>(null)
+  const shop = useShop()
+  const [liveSnapshot, setLiveSnapshot] = useState<ProductionStepSnapshot | null>(null)
+  const [liveLoading, setLiveLoading] = useState(!env.demoMode)
+  const [liveLoadError, setLiveLoadError] = useState<string | null>(null)
+  const [liveNotice, setLiveNotice] = useState<string | null>(null)
+  const [liveLastEventId, setLiveLastEventId] = useState<string | null>(null)
+  const [modal, setModal] = useState<ProductionAction | null>(null)
   const [quantity, setQuantity] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const workOrder = data?.workOrders.find((candidate) => candidate.id === workOrderId)
-  const step = workOrder?.routing.find((candidate) => candidate.id === stepId)
-  const metrics = useMemo(() => workOrder && data ? calculateStepMetrics(workOrder, data.productionEvents) : [], [workOrder, data])
-  const metric = metrics.find((candidate) => candidate.stepId === stepId)
-  const next = workOrder && step ? getNextStep(step, workOrder.routing) : null
-  useEffect(() => { if (!notice) return; const timer = window.setTimeout(clearNotice, 4500); return () => window.clearTimeout(timer) }, [notice, clearNotice])
+  const retryRequest = useRef<{ key: string; requestId: string } | null>(null)
+
+  const demoSnapshot = useMemo<ProductionStepSnapshot | null>(() => {
+    if (!env.demoMode) return null
+    const workOrder = shop.data?.workOrders.find((candidate) => candidate.id === workOrderId)
+    const step = workOrder?.routing.find((candidate) => candidate.id === stepId)
+    if (!workOrder || !step || !shop.data) return null
+    const metric = calculateStepMetrics(workOrder, shop.data.productionEvents).find((candidate) => candidate.stepId === step.id)
+    if (!metric) return null
+    const next = getNextStep(step, workOrder.routing)
+    return {
+      workOrderId: workOrder.id,
+      workOrderName: workOrder.workOrderName,
+      partNumber: workOrder.partNumber,
+      archivedAt: workOrder.archivedAt,
+      stepId: step.id,
+      sequenceNumber: step.sequenceNumber,
+      routingStepName: step.routingStepName,
+      available: metric.available,
+      transferred: metric.transferred,
+      scrapped: metric.scrapped,
+      nextStepId: next?.id ?? null,
+      nextStepName: next?.routingStepName ?? null,
+    }
+  }, [shop.data, stepId, workOrderId])
+
+  const refreshLive = useCallback(async () => {
+    if (env.demoMode) return
+    if (!workOrderId || !stepId) {
+      setLiveSnapshot(null)
+      setLiveLoadError('This production link is invalid.')
+      setLiveLoading(false)
+      return
+    }
+    setLiveLoading(true)
+    try {
+      setLiveSnapshot(await loadProductionStep(workOrderId, stepId))
+      setLiveLoadError(null)
+    } catch (reason) {
+      setLiveSnapshot(null)
+      setLiveLoadError(reason instanceof Error ? reason.message : 'Unable to load this production step.')
+    } finally {
+      setLiveLoading(false)
+    }
+  }, [stepId, workOrderId])
+
+  useEffect(() => { void refreshLive() }, [refreshLive])
+
+  const notice = env.demoMode ? shop.notice : liveNotice
+  const lastEventId = env.demoMode ? shop.lastEventId : liveLastEventId
+  const clearNotice = shop.clearNotice
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => {
+      if (env.demoMode) clearNotice()
+      else setLiveNotice(null)
+    }, 4500)
+    return () => window.clearTimeout(timer)
+  }, [clearNotice, notice])
+
+  const snapshot = env.demoMode ? demoSnapshot : liveSnapshot
+  const loading = env.demoMode ? shop.loading : liveLoading
+  const loadError = env.demoMode ? shop.error : liveLoadError
+
   if (loading) return <main className="production-page"><div className="production-error">Loading production step…</div></main>
   if (loadError) return <main className="production-page"><div className="production-error" role="alert">{loadError}</div></main>
-  if (!data || !workOrder || !step || !metric) return <main className="production-page"><div className="production-error">This production link is invalid.</div></main>
-  if (workOrder.archivedAt) return <main className="production-page"><div className="production-error"><p>This work order is archived. Restore it before recording production.</p><Link className="button button-secondary" to={`/app/work-orders/${workOrder.id}`}><ArrowLeft size={17} /> Return to work order</Link></div></main>
+  if (!snapshot) return <main className="production-page"><div className="production-error">This production link is invalid.</div></main>
+  if (snapshot.archivedAt) return <main className="production-page"><div className="production-error"><p>This work order is archived. Restore it before recording production.</p><Link className="button button-secondary" to={`/app/work-orders/${snapshot.workOrderId}`}><ArrowLeft size={17} /> Return to work order</Link></div></main>
 
-  const submit = async (type: 'transfer' | 'scrap', amount: number) => {
-    if (!canTransfer(amount, metric.available)) { setError(`Enter a whole quantity from 1 to ${metric.available}.`); return }
-    setBusy(true); setError('')
-    try { await transact({ workOrderId: workOrder.id, routingStepId: step.id, eventType: type, quantity: amount, toRoutingStepId: type === 'transfer' ? next?.id ?? null : null }); setModal(null); setQuantity('') }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Transaction failed.') }
-    finally { setBusy(false) }
+  const submit = async (type: ProductionAction, amount: number) => {
+    if (!canTransfer(amount, snapshot.available)) { setError(`Enter a whole quantity from 1 to ${snapshot.available}.`); return }
+    setBusy(true)
+    setError('')
+    try {
+      if (env.demoMode) {
+        await shop.transact({ workOrderId: snapshot.workOrderId, routingStepId: snapshot.stepId, eventType: type, quantity: amount, toRoutingStepId: type === 'transfer' ? snapshot.nextStepId : null })
+      } else {
+        const key = JSON.stringify({ workOrderId: snapshot.workOrderId, stepId: snapshot.stepId, type, amount, nextStepId: snapshot.nextStepId })
+        if (retryRequest.current?.key !== key) retryRequest.current = { key, requestId: crypto.randomUUID() }
+        const event = await recordProductionEvent({
+          workOrderId: snapshot.workOrderId,
+          routingStepId: snapshot.stepId,
+          eventType: type,
+          quantity: amount,
+          toRoutingStepId: type === 'transfer' ? snapshot.nextStepId : null,
+          requestId: retryRequest.current.requestId,
+        })
+        setLiveLastEventId(event.id)
+        await refreshLive()
+        retryRequest.current = null
+        setLiveNotice(type === 'scrap' ? `Recorded ${amount} scrap` : `Transferred ${amount}`)
+      }
+      setModal(null)
+      setQuantity('')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Transaction failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const undo = async () => {
+    if (!lastEventId || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      if (env.demoMode) await shop.undoLast()
+      else {
+        await reverseProductionEvent(lastEventId)
+        await refreshLive()
+        setLiveLastEventId(null)
+        setLiveNotice('Last transaction undone')
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to undo the transaction.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return <main className="production-page">
-    <header className="production-header"><Link to={`/app/work-orders/${workOrder.id}`}><ArrowLeft size={19} /> Work order</Link><span>LIVE PRODUCTION</span></header>
-    {notice && <div className="transaction-toast"><CheckCircle2 /><span>{notice}{notice.startsWith('Transferred') ? ` to ${next?.routingStepName ?? 'Complete'}` : ''}</span>{lastEventId && <button onClick={() => void undoLast()}><RotateCcw size={16} /> Undo</button>}</div>}
+    <header className="production-header"><Link to={`/app/work-orders/${snapshot.workOrderId}`}><ArrowLeft size={19} /> Work order</Link><span>LIVE PRODUCTION</span></header>
+    {notice && <div className="transaction-toast"><CheckCircle2 /><span>{notice}{notice.startsWith('Transferred') ? ` to ${snapshot.nextStepName ?? 'Complete'}` : ''}</span>{lastEventId && <button disabled={busy} onClick={() => void undo()}><RotateCcw size={16} /> Undo</button>}</div>}
     {error && !modal && <div className="production-action-error" role="alert"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error"><X size={17} /></button></div>}
-    <section className="production-ident"><span>{workOrder.workOrderName}</span><h1>{workOrder.partNumber}</h1><div><strong>STEP {step.sequenceNumber}</strong><h2>{step.routingStepName}</h2></div></section>
-    <section className="production-quantity"><span>AVAILABLE HERE</span><strong>{metric.available}</strong><small>pieces</small></section>
-    <section className="production-stats"><div><span>Transferred</span><strong>{metric.transferred}</strong></div><div><span>Scrapped</span><strong>{metric.scrapped}</strong></div><div><span>Next</span><strong>{next?.routingStepName ?? 'Complete'}</strong></div></section>
+    <section className="production-ident"><span>{snapshot.workOrderName}</span><h1>{snapshot.partNumber}</h1><div><strong>STEP {snapshot.sequenceNumber}</strong><h2>{snapshot.routingStepName}</h2></div></section>
+    <section className="production-quantity"><span>AVAILABLE HERE</span><strong>{snapshot.available}</strong><small>pieces</small></section>
+    <section className="production-stats"><div><span>Transferred</span><strong>{snapshot.transferred}</strong></div><div><span>Scrapped</span><strong>{snapshot.scrapped}</strong></div><div><span>Next</span><strong>{snapshot.nextStepName ?? 'Complete'}</strong></div></section>
     <section className="production-actions">
-      <button className="plus-one" disabled={metric.available < 1 || busy} onClick={() => void submit('transfer', 1)}><span>+1</span><ArrowRight /><small>to {next?.routingStepName ?? 'complete'}</small></button>
-      <div className="action-pair"><button disabled={metric.available < 1 || busy} onClick={() => { setError(''); setModal('transfer') }}><PackageCheck /><span>Transfer qty</span></button><button className="scrap-action" disabled={metric.available < 1 || busy} onClick={() => { setError(''); setModal('scrap') }}><Minus /><span>Scrap qty</span></button></div>
-      {metric.available > 1 && <Button className="transfer-all" variant="secondary" disabled={busy} onClick={() => void submit('transfer', metric.available)}>Transfer all {metric.available} available <ArrowRight size={18} /></Button>}
+      <button className="plus-one" disabled={snapshot.available < 1 || busy} onClick={() => void submit('transfer', 1)}><span>+1</span><ArrowRight /><small>to {snapshot.nextStepName ?? 'complete'}</small></button>
+      <div className="action-pair"><button disabled={snapshot.available < 1 || busy} onClick={() => { setError(''); setModal('transfer') }}><PackageCheck /><span>Transfer qty</span></button><button className="scrap-action" disabled={snapshot.available < 1 || busy} onClick={() => { setError(''); setModal('scrap') }}><Minus /><span>Scrap qty</span></button></div>
+      {snapshot.available > 1 && <Button className="transfer-all" variant="secondary" disabled={busy} onClick={() => void submit('transfer', snapshot.available)}>Transfer all {snapshot.available} available <ArrowRight size={18} /></Button>}
     </section>
     <p className="production-hint">No start or complete button. Timestamps update from this activity.</p>
-    {modal && <Modal title={modal === 'scrap' ? 'Record scrap' : `Transfer to ${next?.routingStepName ?? 'Complete'}`} onClose={() => { setModal(null); setError('') }}><form className="quantity-modal" onSubmit={(event) => { event.preventDefault(); void submit(modal, Number(quantity)) }}><label>Quantity<input autoFocus inputMode="numeric" pattern="[0-9]*" value={quantity} onChange={(event) => setQuantity(event.target.value.replace(/\D/g, ''))} placeholder="0" /></label><span>{metric.available} available</span>{modal === 'scrap' && <div className="scrap-warning"><TriangleAlert /> <span>Confirm this irreversible shop-floor count. {quantity ? `${Math.max(0, metric.available - Number(quantity))} pieces will remain at this step.` : 'Enter the scrap quantity to see what remains.'}</span></div>}{error && <p className="form-error">{error}</p>}<div className="modal-actions"><Button type="button" variant="ghost" onClick={() => setModal(null)}><X size={17} /> Cancel</Button><Button variant={modal === 'scrap' ? 'danger' : 'primary'} disabled={busy}>{busy ? 'Saving…' : modal === 'scrap' ? 'Confirm scrap' : 'Transfer'}</Button></div></form></Modal>}
+    {modal && <Modal title={modal === 'scrap' ? 'Record scrap' : `Transfer to ${snapshot.nextStepName ?? 'Complete'}`} onClose={() => { setModal(null); setError('') }}><form className="quantity-modal" onSubmit={(event) => { event.preventDefault(); void submit(modal, Number(quantity)) }}><label>Quantity<input autoFocus inputMode="numeric" pattern="[0-9]*" value={quantity} onChange={(event) => setQuantity(event.target.value.replace(/\D/g, ''))} placeholder="0" /></label><span>{snapshot.available} available</span>{modal === 'scrap' && <div className="scrap-warning"><TriangleAlert /> <span>Confirm this irreversible shop-floor count. {quantity ? `${Math.max(0, snapshot.available - Number(quantity))} pieces will remain at this step.` : 'Enter the scrap quantity to see what remains.'}</span></div>}{error && <p className="form-error">{error}</p>}<div className="modal-actions"><Button type="button" variant="ghost" onClick={() => setModal(null)}><X size={17} /> Cancel</Button><Button variant={modal === 'scrap' ? 'danger' : 'primary'} disabled={busy}>{busy ? 'Saving…' : modal === 'scrap' ? 'Confirm scrap' : 'Transfer'}</Button></div></form></Modal>}
   </main>
 }

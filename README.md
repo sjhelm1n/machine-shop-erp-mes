@@ -12,7 +12,7 @@ Its operating principle is simple: **paper communicates the work; digital captur
 - Per-piece and flat-rate pricing
 - Multiple work orders per manufactured sales-order line
 - Ordered routing without a separate work-center master
-- Immutable release, adjustment, transfer, scrap, and reversal events
+- Immutable, actor-attributed release, adjustment, transfer, scrap, and reversal events
 - Partial transfer, one-piece flow, scrap, and overproduction support
 - Event-derived quantities, timestamps, status, and completion percentage
 - QR traveler PDF generation
@@ -36,7 +36,10 @@ Supabase is the trusted boundary:
 - RLS and explicit grants isolate organizations and customer accounts.
 - A private schema contains authorization and trigger helpers.
 - Customer portal RPCs return a narrow, pre-aggregated contract; customer sessions cannot select raw sales orders, work orders, routing mappings, prices, notes, or production events.
-- Security-invoker RPCs make multi-row order/work-order creation atomic while retaining RLS.
+- Public security-invoker RPC wrappers call narrow, fail-closed database operations that make multi-row order/work-order creation atomic and retry-safe.
+- Production posting uses durable request IDs; identical retries return the original event and conflicting reuse is rejected.
+- Consequential ERP changes write append-only, organization-scoped audit history with actor, source, request, and meaningful field differences.
+- The QR production route loads one narrow database-derived snapshot instead of fetching broad ERP tables into the browser.
 - A validation trigger serializes each work order’s production writes and rejects transfers greater than current availability.
 - Storage keeps manufacturer-uploaded customer documents in a private PDF-only bucket. Object paths are `organization/customer/random-document.pdf` and previews/downloads use 60-second signed URLs.
 
@@ -83,7 +86,7 @@ Timestamps are derived from active events:
 
 ## Local setup
 
-Requirements: Node.js 20+ and npm. Supabase CLI plus Docker are needed only for a local Supabase stack.
+Requirements: Node.js 20+ and npm.
 
 ```bash
 npm install
@@ -98,29 +101,16 @@ Run quality checks with:
 ```bash
 npm test
 npm run lint
+npm run typecheck
 VITE_DEMO_MODE=true npm run build
+npm run audit:dependencies
 ```
 
 ## Supabase setup
 
-1. Install the current [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started) and authenticate it.
-2. Link a project or start the local stack.
-3. Apply the migration and optional seed.
+Use the connected Supabase MCP for project inspection, applying source-controlled migrations, regenerating TypeScript database types, running the rollback-only pgTAP SQL, and checking security/performance advisors. Apply migration files in chronological order; never make an unrecorded dashboard-only schema change.
 
-```bash
-supabase start
-supabase db reset
-supabase test db
-```
-
-For a hosted project, link it and use the normal migration workflow:
-
-```bash
-supabase link --project-ref YOUR_PROJECT_REF
-supabase db push
-```
-
-The schema is in `supabase/migrations/20260825210000_initial_erp_mes_schema.sql`; demo data is in `supabase/seed.sql`. The seed creates operational records but deliberately does not write directly to Supabase-managed `auth.users`, whose internal schema may change. Create users through Auth, then associate their IDs:
+The initial schema is in `supabase/migrations/20260826030732_initial_erp_mes_schema.sql`; later files evolve it additively. Demo data is in `supabase/seed.sql`. The seed creates operational records but deliberately does not write directly to Supabase-managed `auth.users`, whose internal schema may change. Create users through Auth, then associate their IDs:
 
 ```sql
 insert into public.profiles(id, organization_id, customer_id, display_name, role)
@@ -130,6 +120,8 @@ values
 ```
 
 Multiple profile rows can reference the same `customer_id`, which supports multiple portal users for one customer.
+
+After every schema migration, regenerate `src/types/database.generated.ts` from the connected project through Supabase MCP. Do not hand-edit that file. Treat migration → generated types → runtime validators/services → UI as one change unit.
 
 ### Environment variables
 
@@ -157,12 +149,13 @@ In Supabase Auth URL configuration, add local and production redirect URLs for:
 - Manufacturer writes are constrained to the profile’s organization.
 - Customer messages, customer documents, and customer-account rows are constrained to the profile’s organization and `customer_id`; order and production summaries come only from customer-safe RPCs.
 - Raw sales orders, line-item prices, work orders, internal routing, portal mappings, and production events have manufacturer-only select policies.
-- Production events have no operator-identity column or update/delete grant and are validated under a per-work-order advisory transaction lock.
+- Production events capture the authenticated actor in PostgreSQL, have no update/delete grant, require durable request IDs for retryable postings, and are validated under advisory transaction locks.
+- Normal users can read organization audit history only as manufacturers and cannot insert, update, or delete audit rows.
 - Customer messages have plain-text database checks, a 2,000-character limit, and only `read_at` is updatable.
 - Document uploads are manufacturer-only and require a `.pdf` extension, a PDF file signature, passive content checks, an upload attestation, and `application/pdf` MIME type. The private bucket has a 10 MB limit.
 - Frontend route guards improve UX; RLS and Storage policies provide the real authorization.
 
-The pgTAP file in `supabase/tests/database` checks RLS presence, anonymous grants, customer-vs-manufacturer behavior, safe portal RPC isolation, completion-date privileges, operator-neutral events, and bucket privacy. Pure TypeScript tests cover partial transfers, scrap, one-piece flow, overproduction, reversals, transfer limits, quantity-weighted aggregate progress, customer-safe aggregate overrides, and link-free message sanitization.
+The rollback-only pgTAP file in `supabase/tests/database` checks RLS, denied paths, customer/manufacturer isolation, append-only audit access, actor provenance, idempotent production posting, narrow production snapshots, safe portal RPCs, and bucket privacy. Pure TypeScript tests cover routing integrity and runtime database-contract validation.
 
 ## Vercel deployment
 
@@ -183,13 +176,13 @@ The pgTAP file in `supabase/tests/database` checks RLS presence, anonymous grant
 | Manufacturer | `/app/customers` | Customer master |
 | Manufacturer | `/app/sales-orders` | Accepted orders and pricing lines |
 | Manufacturer | `/app/work-orders/:id` | Routing, quantities, timestamps, traveler |
-| Shop floor | `/produce/:workOrderId/:stepId` | QR-driven mobile transaction without operator tracking |
+| Shop floor | `/produce/:workOrderId/:stepId` | QR-driven mobile transaction with database-attributed posting |
 | Manufacturer/customer | questions and invoice routes under `/app` or `/portal` | Scoped Q&A and documents |
 | Customer | `/portal`, `/portal/orders/:id` | Safe progress and order history |
 
 ## Production handoff checklist
 
-- Apply migrations to a staging Supabase project and run `supabase test db`.
+- Apply migrations to a staging Supabase project through Supabase MCP and execute the rollback-only pgTAP file with `finish(true)`.
 - Create Auth users and profile associations; test one manufacturer and both customers.
 - Upload a real PDF and verify each customer can download only its own invoice.
 - Print a traveler and scan every QR code using the phones used on the shop floor.

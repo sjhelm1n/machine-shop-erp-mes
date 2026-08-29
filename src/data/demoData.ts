@@ -5,7 +5,26 @@ const acmeId = '20000000-0000-0000-0000-000000000001'
 const northstarId = '20000000-0000-0000-0000-000000000002'
 
 export const demoData: ShopData = {
-  organization: { id: orgId, name: 'Northline Machine Co.' },
+  organization: { id: orgId, name: 'Northline Machine Co.', plantTimezone: 'America/Detroit' },
+  routingTemplates: [
+    {
+      id: 'routing-template-mill', organizationId: orgId, templateName: 'Standard mill route', archivedAt: null,
+      steps: [
+        { id: 'routing-template-mill-10', routingTemplateId: 'routing-template-mill', sequenceNumber: 10, routingStepName: 'Saw', customerStageName: 'In production', workInstructions: 'Cut blanks to the work-order traveler dimensions.' },
+        { id: 'routing-template-mill-20', routingTemplateId: 'routing-template-mill', sequenceNumber: 20, routingStepName: 'CNC Mill', customerStageName: 'In production', workInstructions: 'Machine per the current drawing and setup sheet.' },
+        { id: 'routing-template-mill-30', routingTemplateId: 'routing-template-mill', sequenceNumber: 30, routingStepName: 'Deburr', customerStageName: 'Finishing', workInstructions: 'Break sharp edges and remove all burrs.' },
+        { id: 'routing-template-mill-40', routingTemplateId: 'routing-template-mill', sequenceNumber: 40, routingStepName: 'Final Inspection', customerStageName: 'Inspection', workInstructions: 'Complete final inspection per the traveler and drawing.' },
+      ],
+    },
+    {
+      id: 'routing-template-lathe', organizationId: orgId, templateName: 'Standard lathe route', archivedAt: null,
+      steps: [
+        { id: 'routing-template-lathe-10', routingTemplateId: 'routing-template-lathe', sequenceNumber: 10, routingStepName: 'CNC Lathe', customerStageName: 'In production', workInstructions: 'Machine per the current drawing and setup sheet.' },
+        { id: 'routing-template-lathe-20', routingTemplateId: 'routing-template-lathe', sequenceNumber: 20, routingStepName: 'Wash', customerStageName: 'Finishing', workInstructions: 'Wash, dry, and verify parts are free of chips and coolant.' },
+        { id: 'routing-template-lathe-30', routingTemplateId: 'routing-template-lathe', sequenceNumber: 30, routingStepName: 'Final Inspection', customerStageName: 'Inspection', workInstructions: 'Complete final inspection per the traveler and drawing.' },
+      ],
+    },
+  ],
   customers: [
     { id: acmeId, organizationId: orgId, customerName: 'Acme Motion Systems', logoUrl: null, primaryAddress: '4800 Industrial Pkwy\nDetroit, MI 48211', defaultShipToAddress: '4800 Industrial Pkwy\nDetroit, MI 48211', defaultBillToAddress: 'PO Box 922\nDetroit, MI 48231' },
     { id: northstarId, organizationId: orgId, customerName: 'Northstar Robotics', logoUrl: null, primaryAddress: '1190 Innovation Dr\nAnn Arbor, MI 48108', defaultShipToAddress: '1190 Innovation Dr\nAnn Arbor, MI 48108', defaultBillToAddress: '1190 Innovation Dr\nAnn Arbor, MI 48108' },
@@ -58,18 +77,18 @@ export const demoData: ShopData = {
     },
   ],
   productionEvents: [
-    { id: 'ev-1', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-10', eventType: 'release', quantity: 102, fromRoutingStepId: null, toRoutingStepId: 'step-824-10', reversedEventId: null, createdAt: '2026-08-12T12:30:00Z' },
-    { id: 'ev-2', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-10', eventType: 'transfer', quantity: 75, fromRoutingStepId: 'step-824-10', toRoutingStepId: 'step-824-20', reversedEventId: null, createdAt: '2026-08-19T14:15:00Z' },
-    { id: 'ev-3', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-10', eventType: 'transfer', quantity: 27, fromRoutingStepId: 'step-824-10', toRoutingStepId: 'step-824-20', reversedEventId: null, createdAt: '2026-08-20T13:40:00Z' },
-    { id: 'ev-4', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-20', eventType: 'transfer', quantity: 46, fromRoutingStepId: 'step-824-20', toRoutingStepId: 'step-824-30', reversedEventId: null, createdAt: '2026-08-22T16:20:00Z' },
-    { id: 'ev-5', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-20', eventType: 'scrap', quantity: 1, fromRoutingStepId: null, toRoutingStepId: null, reversedEventId: null, createdAt: '2026-08-22T16:22:00Z' },
-    { id: 'ev-6', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-30', eventType: 'transfer', quantity: 25, fromRoutingStepId: 'step-824-30', toRoutingStepId: 'step-824-40', reversedEventId: null, createdAt: '2026-08-24T15:05:00Z' },
-    { id: 'ev-7', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-40', eventType: 'transfer', quantity: 8, fromRoutingStepId: 'step-824-40', toRoutingStepId: null, reversedEventId: null, createdAt: '2026-08-25T14:08:00Z' },
-    { id: 'ev-8', organizationId: orgId, workOrderId: 'wo-260831', routingStepId: 'step-831-10', eventType: 'release', quantity: 48, fromRoutingStepId: null, toRoutingStepId: 'step-831-10', reversedEventId: null, createdAt: '2026-08-19T13:00:00Z' },
-    { id: 'ev-9', organizationId: orgId, workOrderId: 'wo-260831', routingStepId: 'step-831-10', eventType: 'transfer', quantity: 1, fromRoutingStepId: 'step-831-10', toRoutingStepId: 'step-831-20', reversedEventId: null, createdAt: '2026-08-25T15:02:00Z' },
-    { id: 'ev-10', organizationId: orgId, workOrderId: 'wo-260796', routingStepId: 'step-796-10', eventType: 'release', quantity: 24, fromRoutingStepId: null, toRoutingStepId: 'step-796-10', reversedEventId: null, createdAt: '2026-07-22T12:00:00Z' },
-    { id: 'ev-11', organizationId: orgId, workOrderId: 'wo-260796', routingStepId: 'step-796-10', eventType: 'transfer', quantity: 24, fromRoutingStepId: 'step-796-10', toRoutingStepId: 'step-796-20', reversedEventId: null, createdAt: '2026-08-11T16:00:00Z' },
-    { id: 'ev-12', organizationId: orgId, workOrderId: 'wo-260796', routingStepId: 'step-796-20', eventType: 'transfer', quantity: 24, fromRoutingStepId: 'step-796-20', toRoutingStepId: null, reversedEventId: null, createdAt: '2026-08-13T15:30:00Z' },
+    { id: 'ev-1', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-10', eventType: 'release', quantity: 102, fromRoutingStepId: null, toRoutingStepId: 'step-824-10', reversedEventId: null, actorId: null, requestId: null, createdAt: '2026-08-12T12:30:00Z' },
+    { id: 'ev-2', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-10', eventType: 'transfer', quantity: 75, fromRoutingStepId: 'step-824-10', toRoutingStepId: 'step-824-20', reversedEventId: null, actorId: null, requestId: 'demo-ev-2', createdAt: '2026-08-19T14:15:00Z' },
+    { id: 'ev-3', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-10', eventType: 'transfer', quantity: 27, fromRoutingStepId: 'step-824-10', toRoutingStepId: 'step-824-20', reversedEventId: null, actorId: null, requestId: 'demo-ev-3', createdAt: '2026-08-20T13:40:00Z' },
+    { id: 'ev-4', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-20', eventType: 'transfer', quantity: 46, fromRoutingStepId: 'step-824-20', toRoutingStepId: 'step-824-30', reversedEventId: null, actorId: null, requestId: 'demo-ev-4', createdAt: '2026-08-22T16:20:00Z' },
+    { id: 'ev-5', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-20', eventType: 'scrap', quantity: 1, fromRoutingStepId: null, toRoutingStepId: null, reversedEventId: null, actorId: null, requestId: 'demo-ev-5', createdAt: '2026-08-22T16:22:00Z' },
+    { id: 'ev-6', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-30', eventType: 'transfer', quantity: 25, fromRoutingStepId: 'step-824-30', toRoutingStepId: 'step-824-40', reversedEventId: null, actorId: null, requestId: 'demo-ev-6', createdAt: '2026-08-24T15:05:00Z' },
+    { id: 'ev-7', organizationId: orgId, workOrderId: 'wo-260824', routingStepId: 'step-824-40', eventType: 'transfer', quantity: 8, fromRoutingStepId: 'step-824-40', toRoutingStepId: null, reversedEventId: null, actorId: null, requestId: 'demo-ev-7', createdAt: '2026-08-25T14:08:00Z' },
+    { id: 'ev-8', organizationId: orgId, workOrderId: 'wo-260831', routingStepId: 'step-831-10', eventType: 'release', quantity: 48, fromRoutingStepId: null, toRoutingStepId: 'step-831-10', reversedEventId: null, actorId: null, requestId: null, createdAt: '2026-08-19T13:00:00Z' },
+    { id: 'ev-9', organizationId: orgId, workOrderId: 'wo-260831', routingStepId: 'step-831-10', eventType: 'transfer', quantity: 1, fromRoutingStepId: 'step-831-10', toRoutingStepId: 'step-831-20', reversedEventId: null, actorId: null, requestId: 'demo-ev-9', createdAt: '2026-08-25T15:02:00Z' },
+    { id: 'ev-10', organizationId: orgId, workOrderId: 'wo-260796', routingStepId: 'step-796-10', eventType: 'release', quantity: 24, fromRoutingStepId: null, toRoutingStepId: 'step-796-10', reversedEventId: null, actorId: null, requestId: null, createdAt: '2026-07-22T12:00:00Z' },
+    { id: 'ev-11', organizationId: orgId, workOrderId: 'wo-260796', routingStepId: 'step-796-10', eventType: 'transfer', quantity: 24, fromRoutingStepId: 'step-796-10', toRoutingStepId: 'step-796-20', reversedEventId: null, actorId: null, requestId: 'demo-ev-11', createdAt: '2026-08-11T16:00:00Z' },
+    { id: 'ev-12', organizationId: orgId, workOrderId: 'wo-260796', routingStepId: 'step-796-20', eventType: 'transfer', quantity: 24, fromRoutingStepId: 'step-796-20', toRoutingStepId: null, reversedEventId: null, actorId: null, requestId: 'demo-ev-12', createdAt: '2026-08-13T15:30:00Z' },
   ],
   questions: [
     { id: 'q-1', organizationId: orgId, customerId: acmeId, salesOrderId: 'so-1048', senderType: 'customer', message: 'Can you confirm the first 25 pieces will be ready by Thursday?', createdAt: '2026-08-25T13:12:00Z', readAt: null },

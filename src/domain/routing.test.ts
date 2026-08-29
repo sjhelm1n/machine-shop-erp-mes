@@ -15,7 +15,7 @@ const workOrder: WorkOrder = {
 
 const event = (id: string, eventType: ProductionEvent['eventType'], quantity: number, from: string | null, to: string | null): ProductionEvent => ({
   id, organizationId: 'org', workOrderId: 'wo', routingStepId: from ?? to ?? 's1', eventType, quantity,
-  fromRoutingStepId: from, toRoutingStepId: to, reversedEventId: null, createdAt: `2026-08-01T10:0${id.length}:00Z`,
+  fromRoutingStepId: from, toRoutingStepId: to, reversedEventId: null, actorId: null, requestId: id, createdAt: `2026-08-01T10:0${id.length}:00Z`,
 })
 
 describe('routing calculations', () => {

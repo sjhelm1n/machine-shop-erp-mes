@@ -6,6 +6,7 @@ export type CustomerDocumentType = 'customer_po' | 'invoice' | 'drawing' | 'othe
 export interface Organization {
   id: string
   name: string
+  plantTimezone: string
 }
 
 export interface Profile {
@@ -72,6 +73,35 @@ export interface RoutingStep {
   notes: string
 }
 
+export interface RoutingTemplateStep {
+  id: string
+  routingTemplateId: string
+  sequenceNumber: number
+  routingStepName: string
+  customerStageName: string
+  workInstructions: string
+}
+
+export interface RoutingTemplate {
+  id: string
+  organizationId: string
+  templateName: string
+  archivedAt: string | null
+  steps: RoutingTemplateStep[]
+}
+
+export interface StepMetrics {
+  stepId: string
+  entered: number
+  transferred: number
+  scrapped: number
+  available: number
+  processed: number
+  enteredAt: string | null
+  startedAt: string | null
+  completedAt: string | null
+}
+
 export interface WorkOrder {
   id: string
   organizationId: string
@@ -87,6 +117,8 @@ export interface WorkOrder {
   archivedAt: string | null
   notes: string
   routing: RoutingStep[]
+  /** Set-wise database summary for live manufacturer views. */
+  stepMetrics?: StepMetrics[]
   /** Customer-safe aggregate supplied by the portal RPC; raw events stay internal. */
   customerProgressPercent?: number
   /** Customer-safe stage supplied by the portal RPC; internal routing stays hidden. */
@@ -103,7 +135,24 @@ export interface ProductionEvent {
   fromRoutingStepId: string | null
   toRoutingStepId: string | null
   reversedEventId: string | null
+  actorId: string | null
+  requestId: string | null
   createdAt: string
+}
+
+export interface ProductionStepSnapshot {
+  workOrderId: string
+  workOrderName: string
+  partNumber: string
+  archivedAt: string | null
+  stepId: string
+  sequenceNumber: number
+  routingStepName: string
+  available: number
+  transferred: number
+  scrapped: number
+  nextStepId: string | null
+  nextStepName: string | null
 }
 
 export interface Question {
@@ -132,10 +181,19 @@ export interface CustomerDocument {
 
 export interface ShopData {
   organization: Organization
+  routingTemplates: RoutingTemplate[]
   customers: Customer[]
   salesOrders: SalesOrder[]
   workOrders: WorkOrder[]
   productionEvents: ProductionEvent[]
   questions: Question[]
   documents: CustomerDocument[]
+  pageInfo?: {
+    limit: number
+    customersHasMore: boolean
+    salesOrdersHasMore: boolean
+    workOrdersHasMore: boolean
+    questionsHasMore: boolean
+    documentsHasMore: boolean
+  }
 }

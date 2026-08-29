@@ -16,6 +16,7 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => 
 const PortalHomePage = lazy(() => import('./pages/PortalHomePage').then((module) => ({ default: module.PortalHomePage })))
 const ProductionPage = lazy(() => import('./pages/ProductionPage').then((module) => ({ default: module.ProductionPage })))
 const QuestionsPage = lazy(() => import('./pages/QuestionsPage').then((module) => ({ default: module.QuestionsPage })))
+const RoutingTemplatesPage = lazy(() => import('./pages/RoutingTemplatesPage').then((module) => ({ default: module.RoutingTemplatesPage })))
 const SalesOrderDetailPage = lazy(() => import('./pages/SalesOrderDetailPage').then((module) => ({ default: module.SalesOrderDetailPage })))
 const SalesOrdersPage = lazy(() => import('./pages/SalesOrdersPage').then((module) => ({ default: module.SalesOrdersPage })))
 const WorkOrderDetailPage = lazy(() => import('./pages/WorkOrderDetailPage').then((module) => ({ default: module.WorkOrderDetailPage })))
@@ -43,6 +44,7 @@ export default function App() {
       <Route path="sales-orders/:orderId" element={<SalesOrderDetailPage />} />
       <Route path="work-orders" element={<WorkOrdersPage />} />
       <Route path="work-orders/:workOrderId" element={<WorkOrderDetailPage />} />
+      <Route path="routing" element={<RoutingTemplatesPage />} />
       <Route path="questions" element={<QuestionsPage />} />
       <Route path="documents" element={<DocumentsPage />} />
       <Route path="invoices" element={<Navigate to="/app/documents" replace />} />

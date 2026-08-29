@@ -6,11 +6,13 @@ import { Badge, Button, EmptyState, PageHeader } from '../components/Ui'
 import { useShop } from '../context/ShopContext'
 import { customerPortalSnapshot, type CustomerPortalSnapshot } from '../domain/customerPortal'
 import { documentTypeLabels } from '../domain/documentFilters'
+import { archivedConversationOrderIds } from '../domain/questions'
 import { env } from '../lib/env'
 import { formatDate, formatDateTime, money } from '../lib/format'
 import { getDocumentUrl } from '../services/shopService'
 
 type PreviewSection = 'orders' | 'questions' | 'documents'
+type ConversationFilter = 'active' | 'archived'
 
 const previewSections = [
   { id: 'orders' as const, label: 'Orders', icon: PackageCheck },
@@ -22,16 +24,22 @@ function PreviewHeading({ eyebrow, title, description }: { eyebrow: string; titl
   return <header className="portal-preview-heading"><span className="eyebrow">{eyebrow}</span><h2>{title}</h2><p>{description}</p></header>
 }
 
-function QuestionsPreview({ snapshot }: { snapshot: CustomerPortalSnapshot }) {
+function QuestionsPreview({ snapshot, plantTimezone }: { snapshot: CustomerPortalSnapshot; plantTimezone: string }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
-  const threadKeys = [...new Set(snapshot.questions.map((question) => question.salesOrderId ?? `customer:${question.customerId}`))]
+  const [conversationFilter, setConversationFilter] = useState<ConversationFilter>('active')
+  const archivedOrderIds = archivedConversationOrderIds(snapshot.salesOrders, snapshot.workOrders, snapshot.productionEvents, plantTimezone)
+  const allThreadKeys = [...new Set(snapshot.questions.map((question) => question.salesOrderId ?? `customer:${question.customerId}`))]
+  const activeThreadKeys = allThreadKeys.filter((key) => !archivedOrderIds.has(key))
+  const archivedThreadKeys = allThreadKeys.filter((key) => archivedOrderIds.has(key))
+  const threadKeys = conversationFilter === 'active' ? activeThreadKeys : archivedThreadKeys
   const activeKey = selectedKey && threadKeys.includes(selectedKey) ? selectedKey : threadKeys[0] ?? null
   const selectedMessages = snapshot.questions.filter((question) => (question.salesOrderId ?? `customer:${question.customerId}`) === activeKey)
   const selectedOrder = snapshot.salesOrders.find((order) => order.id === activeKey)
 
   return <>
     <PreviewHeading eyebrow="Order-linked Q&A" title="Questions" description="Plain-text conversations tied to accepted orders." />
-    {threadKeys.length === 0 ? <EmptyState title="No questions yet" body="The customer can ask the shop a question about an accepted order." /> : <section className="messages-shell portal-preview-messages">
+    <div className="toolbar"><div className="segmented" aria-label="Preview conversation status"><button className={conversationFilter === 'active' ? 'active' : ''} onClick={() => setConversationFilter('active')}>Active ({activeThreadKeys.length})</button><button className={conversationFilter === 'archived' ? 'active' : ''} onClick={() => setConversationFilter('archived')}>Archived ({archivedThreadKeys.length})</button></div></div>
+    {threadKeys.length === 0 ? <EmptyState title={conversationFilter === 'archived' ? 'No archived conversations' : 'No active conversations'} body={conversationFilter === 'archived' ? 'Completed-order conversations appear here after seven days.' : 'The customer can ask the shop a question about an accepted order.'} /> : <section className="messages-shell portal-preview-messages">
       <aside className="thread-list">{threadKeys.map((key) => {
         const messages = snapshot.questions.filter((question) => (question.salesOrderId ?? `customer:${question.customerId}`) === key)
         const latest = messages.at(-1)!
@@ -41,8 +49,8 @@ function QuestionsPreview({ snapshot }: { snapshot: CustomerPortalSnapshot }) {
       })}</aside>
       <div className="conversation"><header><div><strong>{selectedOrder?.salesOrderName ?? 'General question'}</strong><span>{selectedOrder ? `${selectedOrder.salesOrderName} · PO ${selectedOrder.customerPoNumber}` : 'General question'}</span></div></header><div className="message-stream">{selectedMessages.map((question) => {
         const own = question.senderType === 'customer'
-        return <div className={`message-bubble ${own ? 'own' : ''}`} key={question.id}><span>{question.message}</span><small>{formatDateTime(question.createdAt)} {own && <CheckCheck size={13} />}</small></div>
-      })}</div><div className="message-compose portal-preview-compose"><textarea aria-label="Message preview" rows={2} placeholder="Type a plain-text message…" disabled /><Button aria-label="Send message preview" disabled><Send size={18} /></Button></div></div>
+        return <div className={`message-bubble ${own ? 'own' : ''}`} key={question.id}><span>{question.message}</span><small>{formatDateTime(question.createdAt, plantTimezone)} {own && <CheckCheck size={13} />}</small></div>
+      })}</div>{conversationFilter === 'archived' ? <div className="report-empty">Archived conversations are read-only.</div> : <div className="message-compose portal-preview-compose"><textarea aria-label="Message preview" rows={2} placeholder="Plain text only—no links or attachments…" disabled /><Button aria-label="Send message preview" disabled><Send size={18} /></Button></div>}</div>
     </section>}
   </>
 }
@@ -92,7 +100,7 @@ export function CustomerPortalViewPage() {
         <nav className="portal-preview-nav" aria-label="Customer portal preview sections">{previewSections.map(({ id, label, icon: Icon }) => <button className={section === id ? 'active' : ''} onClick={() => setSection(id)} aria-current={section === id ? 'page' : undefined} key={id}><Icon size={17} /><span>{label}</span></button>)}</nav>
         <div className="portal-preview-content">
           {section === 'orders' && <><PreviewHeading eyebrow="Customer portal" title={`Welcome, ${snapshot.customer?.customerName}`} description="A clear view of accepted orders and current production progress." /><PortalOrdersView snapshot={snapshot} /></>}
-          {section === 'questions' && <QuestionsPreview snapshot={snapshot} />}
+          {section === 'questions' && <QuestionsPreview snapshot={snapshot} plantTimezone={data?.organization.plantTimezone ?? 'UTC'} />}
           {section === 'documents' && <DocumentsPreview snapshot={snapshot} />}
         </div>
       </section>

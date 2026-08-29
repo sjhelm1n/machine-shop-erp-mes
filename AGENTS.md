@@ -89,6 +89,27 @@ Path:
 
 `.agents/skills/customer-portal-rules/SKILL.md`
 
+## ERP Platform Contracts
+
+| Task | Skill |
+|---|---|
+| Stable identities/revisions, posted facts, inventory reconciliation, UOMs, master-data lifecycle | `.agents/skills/erp-domain-invariants/SKILL.md` |
+| Public extension surfaces, stable routes/RPCs/template placeholders, compatibility | `.agents/skills/erp-extension-contracts/SKILL.md` |
+| Supabase schema changes, migrations, RLS, generated DB types, secure views | `.agents/skills/erp-schema-evolution/SKILL.md` |
+| Multi-record writes, posting, quantities/money, status transitions, idempotency | `.agents/skills/erp-data-integrity/SKILL.md` |
+| High-volume reads, pagination/search, reports, bulk edits, imports/exports, synchronization | `.agents/skills/erp-data-scale/SKILL.md` |
+| Business dates, timestamps, plant timezones, shifts, production dates, recurrence | `.agents/skills/erp-date-time-semantics/SKILL.md` |
+| Roles/permissions, RLS boundaries, tenant/company scope, service-role access | `.agents/skills/erp-access-control/SKILL.md` |
+| Critical change history, append-only audit data, retention/archive | `.agents/skills/erp-auditability/SKILL.md` |
+
+## Development Memory
+
+Before non-trivial work, read `.ai/lessons.md` for durable project lessons.
+
+After a correction that reveals a reusable rule, add one concise entry using:
+
+`Context -> Problem -> Rule -> Applies to`
+
 ## Common Skill Combinations
 
 Sales Orders or Work Orders:
@@ -114,11 +135,26 @@ Customer portal:
 - `machine-shop-erp-guardrails`
 - `customer-portal-rules`
 
+Data-heavy screens or bulk data movement:
+
+- `mes-project-conventions`
+- `erp-data-scale`
+- The applicable schema, integrity, access-control, or extension contract skills
+
+Date, time, shift, or production-calendar behavior:
+
+- `mes-project-conventions`
+- `machine-shop-erp-guardrails`
+- `erp-date-time-semantics`
+- The applicable schema, integrity, data-scale, or extension contract skills
+
+## Existing Skills Remain Authoritative
+
+Do not duplicate the existing global React, Supabase, security, browser, or verification skills.
+
+Do not duplicate the existing local project conventions, machine-shop domain, mobile production UX, traveler/QR output, or customer portal skills.
+
 ## General Guidance
-
-Use globally installed React, Supabase, security, browser, and verification skills for general technical best practices.
-
-Do not duplicate those global rules in local skills.
 
 When multiple local skills apply, follow all applicable skills.
 

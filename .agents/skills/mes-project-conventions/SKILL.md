@@ -47,8 +47,12 @@ Rules:
 
 - RLS must enforce tenant and customer isolation.
 - Never rely only on frontend authorization.
+- A protected route is UX; RLS/server authorization remains the security boundary.
 - Never expose the Supabase service-role key to client-side code.
 - Use migrations for schema changes.
+- Regenerate Supabase TypeScript database types after migrations; never hand-edit generated types.
+- For business operations requiring atomicity, use a real Postgres transaction/RPC rather than sequential Supabase client writes.
+- For exposed Postgres views, preserve underlying RLS (`security_invoker` where appropriate).
 - Use foreign keys and indexes appropriately.
 - Prefer database constraints for important integrity rules.
 - Store immutable production events rather than overwriting production history.
@@ -59,7 +63,7 @@ Rules:
 
 - Deploy the Vite application using Vercel.
 - Keep environment variables out of source control.
-- Separate public frontend environment variables from privileged server-side secrets.
+- Treat Vite client-exposed environment variables as public. Keep Supabase service-role and other server secrets in server/Vercel runtime configuration only.
 - Keep deployment configuration minimal.
 
 ## General Engineering
