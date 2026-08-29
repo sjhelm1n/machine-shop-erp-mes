@@ -1,4 +1,4 @@
-import { Building2, KeyRound, Mail, RefreshCw, Search, ShieldCheck, Smartphone, Trash2, UserPlus, Users, Wifi } from 'lucide-react'
+import { Building2, Mail, Search, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Badge, Button, EmptyState, LoadingState, Modal, PageHeader } from '../components/Ui'
 import { useAuth } from '../context/AuthContext'
@@ -6,7 +6,6 @@ import { useShop } from '../context/ShopContext'
 import type { AppRole } from '../domain/types'
 import { emailMatchesDomain, normalizedEmail, type ManageableCustomer, type ManagedUser } from '../domain/userManagement'
 import { env } from '../lib/env'
-import { loadProductionAccessAdmin, manageProductionDevice, resetProductionPin, type ManagedProductionDevice, type ProductionOperatorOption } from '../services/productionAccessService'
 import { inviteManagedUser, loadManagedUsers, removeManagedUser } from '../services/userService'
 
 type UserGroup = 'manufacturer' | 'customer'
@@ -21,7 +20,6 @@ const demoUsers: ManagedUser[] = [
 function customerOptions(dataCustomers: NonNullable<ReturnType<typeof useShop>['data']>['customers']): ManageableCustomer[] {
   return dataCustomers.map((customer) => ({ id: customer.id, customerName: customer.customerName, emailDomain: customer.emailDomain }))
 }
-
 export function UsersPage() {
   const { profile } = useAuth()
   const { data } = useShop()
@@ -35,11 +33,6 @@ export function UsersPage() {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
-  const [devices, setDevices] = useState<ManagedProductionDevice[]>([])
-  const [operators, setOperators] = useState<ProductionOperatorOption[]>([])
-  const [deviceAssignments, setDeviceAssignments] = useState<Record<string, string>>({})
-  const [deviceBusy, setDeviceBusy] = useState<string | null>(null)
-  const [deviceError, setDeviceError] = useState('')
   const [form, setForm] = useState({ displayName: '', email: '', position: '', role: (profile?.role === 'customer' ? 'customer' : 'manufacturer') as AppRole, customerId: profile?.customerId ?? '' })
 
   const refresh = useCallback(async () => {
@@ -58,39 +51,6 @@ export function UsersPage() {
   }, [])
 
   useEffect(() => { void refresh() }, [refresh])
-
-  const refreshProductionAccess = useCallback(async () => {
-    if (env.demoMode || !profile?.isSuperAdmin || profile.role !== 'manufacturer') return
-    try {
-      const result = await loadProductionAccessAdmin()
-      setDevices(result.devices)
-      setOperators(result.operators)
-      setDeviceAssignments((current) => Object.fromEntries(result.devices.map((device) => [device.id, current[device.id] ?? device.assignedOperatorId ?? result.operators.find((operator) => operator.active)?.id ?? ''])))
-      setDeviceError('')
-    } catch (reason) {
-      setDeviceError(reason instanceof Error ? reason.message : 'Unable to load production devices.')
-    }
-  }, [profile?.isSuperAdmin, profile?.role])
-
-  useEffect(() => { void refreshProductionAccess() }, [refreshProductionAccess])
-
-  const updateDevice = async (action: 'approve' | 'approve_network' | 'revoke', device: ManagedProductionDevice) => {
-    if (action === 'revoke' && !window.confirm(`Revoke production access for device ${device.id.slice(0, 8).toUpperCase()}?`)) return
-    setDeviceBusy(device.id); setDeviceError('')
-    try {
-      await manageProductionDevice(action, device.id, action === 'approve' ? deviceAssignments[device.id] : undefined)
-      await refreshProductionAccess()
-    } catch (reason) { setDeviceError(reason instanceof Error ? reason.message : 'Unable to update this device.') }
-    finally { setDeviceBusy(null) }
-  }
-
-  const resetPin = async (operator: ProductionOperatorOption) => {
-    if (!window.confirm(`Reset ${operator.displayName}’s production PIN? Their active production sessions will be signed out.`)) return
-    setDeviceBusy(operator.id); setDeviceError('')
-    try { await resetProductionPin(operator.id); await refreshProductionAccess() }
-    catch (reason) { setDeviceError(reason instanceof Error ? reason.message : 'Unable to reset this PIN.') }
-    finally { setDeviceBusy(null) }
-  }
 
   const customerNameById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer.customerName])), [customers])
   const visibleUsers = useMemo(() => {
@@ -180,23 +140,6 @@ export function UsersPage() {
         <div className="user-access-scope"><span>{user.role === 'manufacturer' ? 'Plant staff' : customerNameById.get(user.customerId ?? '') ?? 'Customer portal'}</span>{user.isSuperAdmin && <Badge tone="blue">Super admin</Badge>}<Badge tone={user.activatedAt ? 'green' : 'amber'}>{user.activatedAt ? 'Active' : 'Invitation sent'}</Badge></div>
         <Button variant="danger" disabled={user.isSuperAdmin || user.id === profile?.id || removingId === user.id} title={user.isSuperAdmin ? 'The plant super admin cannot be removed.' : user.id === profile?.id ? 'You cannot remove your own access.' : undefined} onClick={() => void removeUser(user)}><Trash2 size={15} /> {removingId === user.id ? 'Removing…' : 'Remove'}</Button>
       </article>)}
-    </section>}
-    {profile?.role === 'manufacturer' && profile.isSuperAdmin && group === 'manufacturer' && <section className="production-device-admin" aria-labelledby="production-device-heading">
-      <header><div><span>SHOP FLOOR ACCESS</span><h2 id="production-device-heading">Production devices</h2><p>Approve a phone after its first QR scan, assign it to an operator, and manage production-only PINs.</p></div><Button variant="secondary" disabled={Boolean(deviceBusy)} onClick={() => void refreshProductionAccess()}><RefreshCw size={16} /> Refresh</Button></header>
-      {deviceError && <p className="form-error" role="alert">{deviceError}</p>}
-      {devices.length === 0 ? <EmptyState title="No production devices" body="A phone will appear here after an operator scans a traveler QR code." /> : <div className="production-device-list">
-        {devices.map((device) => {
-          const operator = operators.find((candidate) => candidate.id === device.assignedOperatorId)
-          const status = device.revokedAt ? 'Revoked' : device.networkChangePending ? 'Network approval needed' : device.approvedAt ? 'Approved' : 'Pending approval'
-          return <article className="production-device-row" key={device.id}>
-            <Smartphone size={20} />
-            <div><strong>{device.deviceName}</strong><span>Device ID {device.id.slice(0, 8).toUpperCase()}</span><small>{status}{device.lastSeenAt ? ` · Last seen ${new Date(device.lastSeenAt).toLocaleString()}` : ''}</small></div>
-            {!device.approvedAt && !device.revokedAt ? <select aria-label={`Operator for device ${device.id.slice(0, 8)}`} value={deviceAssignments[device.id] ?? ''} onChange={(event) => setDeviceAssignments((current) => ({ ...current, [device.id]: event.target.value }))}><option value="">Choose operator…</option>{operators.filter((candidate) => candidate.active).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.displayName}</option>)}</select> : <span className="device-operator">{operator?.displayName ?? 'Unassigned'}</span>}
-            <div className="device-actions">{!device.approvedAt && !device.revokedAt && <Button disabled={deviceBusy === device.id || !deviceAssignments[device.id]} onClick={() => void updateDevice('approve', device)}>Approve</Button>}{device.networkChangePending && !device.revokedAt && <Button disabled={deviceBusy === device.id} onClick={() => void updateDevice('approve_network', device)}><Wifi size={15} /> Approve network</Button>}{!device.revokedAt && <Button variant="danger" disabled={deviceBusy === device.id} onClick={() => void updateDevice('revoke', device)}>Revoke</Button>}</div>
-          </article>
-        })}
-      </div>}
-      <div className="production-pin-admin"><h3>Operator PINs</h3>{operators.filter((operator) => operator.active).map((operator) => <div key={operator.id}><span><strong>{operator.displayName}</strong><small>{operator.hasPin ? 'PIN configured' : 'PIN not set'}</small></span>{operator.hasPin && <Button variant="secondary" disabled={deviceBusy === operator.id} onClick={() => void resetPin(operator)}><KeyRound size={15} /> Reset PIN</Button>}</div>)}</div>
     </section>}
     {open && <Modal title={form.role === 'manufacturer' ? 'Add plant staff' : 'Add portal user'} onClose={() => !busy && setOpen(false)}><form className="entity-form" onSubmit={submitInvite}>
       {profile?.role === 'manufacturer' && <label className="full">Access type<select value={form.role} onChange={(event) => { const role = event.target.value as AppRole; setForm((current) => ({ ...current, role, customerId: role === 'customer' ? current.customerId || customers[0]?.id || '' : '' })) }}><option value="manufacturer">Plant staff — ERP access</option><option value="customer">Customer personnel — portal access</option></select></label>}

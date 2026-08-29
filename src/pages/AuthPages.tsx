@@ -5,7 +5,7 @@ import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react
 import { useAuth } from '../context/AuthContext'
 import { env } from '../lib/env'
 import { supabase } from '../lib/supabase'
-import { Button } from '../components/Ui'
+import { Button, LoadingState } from '../components/Ui'
 import { ACCOUNT_CREATION_HOLD_MS } from '../domain/accountCreation'
 
 export function LoginPage() {
@@ -49,7 +49,8 @@ export function LoginPage() {
     }
   }, [])
 
-  if (!loading && session && !profile) return <Navigate to="/finish-account" replace />
+  if (loading) return <main className="centered"><LoadingState /></main>
+  if (session && !profile) return <Navigate to="/finish-account" replace />
   if (env.demoMode || profile) return <Navigate to={profile?.role === 'customer' ? '/portal' : '/app'} replace />
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError('')

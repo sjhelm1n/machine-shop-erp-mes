@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { env } from '../lib/env'
 import { supabase } from '../lib/supabase'
 import type { AppRole, Profile } from '../domain/types'
@@ -28,6 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(env.demoMode ? demoProfiles.manufacturer : null)
   const [loading, setLoading] = useState(!env.demoMode)
   const [demoRole, setDemoRoleState] = useState<AppRole>('manufacturer')
+  const resolvedUserId = useRef<string | null>(null)
+  const authRequestId = useRef(0)
 
   const fetchProfile = useCallback(async (nextSession: Session | null) => {
     if (!nextSession || !supabase) return null
@@ -43,16 +45,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true
     const hydrate = async (nextSession: Session | null) => {
       if (!active) return
+      const requestId = ++authRequestId.current
+      const nextUserId = nextSession?.user.id ?? null
+      const needsProfileResolution = nextUserId !== resolvedUserId.current
+
+      if (needsProfileResolution) {
+        setLoading(true)
+        setProfile(null)
+      }
       setSession(nextSession)
       if (!nextSession) {
+        resolvedUserId.current = null
         setProfile(null)
         setLoading(false)
         return
       }
       const nextProfile = await fetchProfile(nextSession)
-      if (!active) return
+      if (!active || requestId !== authRequestId.current) return
+      resolvedUserId.current = nextUserId
       setProfile(nextProfile)
-      setLoading(false)
+      if (needsProfileResolution) setLoading(false)
     }
     void client.auth.getSession().then(({ data }) => hydrate(data.session))
     const { data: listener } = client.auth.onAuthStateChange((_event, nextSession) => { void hydrate(nextSession) })
@@ -74,9 +86,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase) return profile
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
+      const requestId = ++authRequestId.current
+      setLoading(true)
       setSession(data.session)
+      setProfile(null)
       const nextProfile = await fetchProfile(data.session)
-      setProfile(nextProfile)
+      if (requestId === authRequestId.current) {
+        resolvedUserId.current = data.session.user.id
+        setProfile(nextProfile)
+        setLoading(false)
+      }
       return nextProfile
     },
     signOut: async () => {

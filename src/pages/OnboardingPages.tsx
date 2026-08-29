@@ -41,7 +41,7 @@ function TimezoneField({ value, onChange }: { value: string; onChange: (value: s
 }
 
 export function CreateAccountPage() {
-  const { session, profile } = useAuth()
+  const { session, profile, loading } = useAuth()
   const navigate = useNavigate()
   const [companyName, setCompanyName] = useState('')
   const [email, setEmail] = useState('')
@@ -51,6 +51,7 @@ export function CreateAccountPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  if (loading) return <main className="centered"><LoadingState /></main>
   if (env.demoMode) return <Navigate to="/login" replace />
   if (profile) return <Navigate to={profile.role === 'customer' ? '/portal' : '/app'} replace />
   if (session) return <Navigate to="/finish-account" replace />

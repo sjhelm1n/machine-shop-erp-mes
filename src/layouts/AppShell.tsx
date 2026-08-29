@@ -1,7 +1,8 @@
-import { ChevronDown, ClipboardList, Factory, Files, HelpCircle, LayoutDashboard, LogOut, Menu, MonitorCheck, PackageCheck, Route as RouteIcon, UserCog, Users, X } from 'lucide-react'
+import { ChevronDown, ClipboardList, Factory, Files, HelpCircle, LayoutDashboard, LogOut, Menu, MonitorCheck, PackageCheck, QrCode, Route as RouteIcon, UserCog, Users, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { ProductionQrScanner } from '../components/ProductionQrScanner'
 import { useAuth } from '../context/AuthContext'
 import { useShop } from '../context/ShopContext'
 import { env } from '../lib/env'
@@ -76,6 +77,8 @@ export function AppShell() {
   const { profile, demoRole, setDemoRole, signOut } = useAuth()
   const { data } = useShop()
   const [open, setOpen] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const closeScanner = useCallback(() => setScannerOpen(false), [])
   const nav = profile?.role === 'customer' ? portalNav : manufacturerNav
   return <div className="app-shell">
     <aside className={`sidebar ${open ? 'sidebar-open' : ''}`}>
@@ -88,8 +91,9 @@ export function AppShell() {
     </aside>
     {open && <button className="nav-scrim" onClick={() => setOpen(false)} aria-label="Close navigation" />}
     <div className="app-main">
-      <div className="mobile-bar"><button onClick={() => setOpen(true)} aria-label="Open navigation"><Menu /></button><strong><img className="mobile-logo" src="/brand/shopcore-mark.png" alt="" aria-hidden="true" />ShopCore ERP</strong><span>{profile?.role === 'customer' ? 'Portal' : 'Shop'}</span></div>
+      <div className="mobile-bar"><button onClick={() => setOpen(true)} aria-label="Open navigation"><Menu /></button><strong><img className="mobile-logo" src="/brand/shopcore-mark.png" alt="" aria-hidden="true" />ShopCore ERP</strong>{profile?.role === 'manufacturer' ? <button className="mobile-scan-button" onClick={() => setScannerOpen(true)} aria-label="Scan traveler QR code"><QrCode /></button> : <span>Portal</span>}</div>
       <Outlet />
     </div>
+    {scannerOpen && profile?.role === 'manufacturer' && <ProductionQrScanner onClose={closeScanner} />}
   </div>
 }
