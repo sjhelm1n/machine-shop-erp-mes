@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, Minus, PackageCheck, QrCode, RotateCcw, TriangleAlert, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { ProductionQrScanner } from '../components/ProductionQrScanner'
 import { Button, Modal } from '../components/Ui'
 import { useShop } from '../context/ShopContext'
 import { calculateStepMetrics, canTransfer, getNextStep } from '../domain/routing'
@@ -23,7 +24,9 @@ export function ProductionPage() {
   const [quantity, setQuantity] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
   const retryRequest = useRef<{ key: string; requestId: string } | null>(null)
+  const closeScanner = useCallback(() => setScannerOpen(false), [])
 
   const demoSnapshot = useMemo<ProductionStepSnapshot | null>(() => {
     if (!env.demoMode) return null
@@ -167,7 +170,7 @@ export function ProductionPage() {
   }
 
   return <main className="production-page">
-    <header className="production-header"><Link to={`/app/work-orders/${snapshot.workOrderId}`}><ArrowLeft size={19} /> Work order</Link><span>LIVE PRODUCTION</span></header>
+    <header className="production-header"><Link to={`/app/work-orders/${snapshot.workOrderId}`}><ArrowLeft size={19} /> Work order</Link><div className="production-header-actions"><span>LIVE PRODUCTION</span><button type="button" onClick={() => setScannerOpen(true)}><QrCode size={19} /> Scan QR</button></div></header>
     {notice && <div className="transaction-toast"><CheckCircle2 /><span>{notice}{notice.startsWith('Transferred') ? ` to ${snapshot.nextStepName ?? 'Complete'}` : ''}</span>{lastEventId && <button disabled={busy} onClick={() => void undo()}><RotateCcw size={16} /> Undo</button>}</div>}
     {error && !modal && <div className="production-action-error" role="alert"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error"><X size={17} /></button></div>}
     <section className="production-ident"><span>{snapshot.workOrderName}</span><h1>{snapshot.partNumber}</h1><div><strong>STEP {snapshot.sequenceNumber}</strong><h2>{snapshot.routingStepName}</h2></div></section>
@@ -182,5 +185,6 @@ export function ProductionPage() {
     </section>
     <p className="production-hint">No start or complete button. Timestamps update from this activity.</p>
     {modal && <Modal title={modal === 'scrap' ? 'Record scrap' : `Transfer to ${snapshot.nextStepName ?? 'Complete'}`} onClose={() => { setModal(null); setError('') }}><form className="quantity-modal" onSubmit={(event) => { event.preventDefault(); void submit(modal, Number(quantity)) }}><label>Quantity<input autoFocus inputMode="numeric" pattern="[0-9]*" value={quantity} onChange={(event) => setQuantity(event.target.value.replace(/\D/g, ''))} placeholder="0" /></label><span>{snapshot.available} available</span>{modal === 'scrap' && <div className="scrap-warning"><TriangleAlert /> <span>Confirm this irreversible shop-floor count. {quantity ? `${Math.max(0, snapshot.available - Number(quantity))} pieces will remain at this step.` : 'Enter the scrap quantity to see what remains.'}</span></div>}{error && <p className="form-error">{error}</p>}<div className="modal-actions"><Button type="button" variant="ghost" onClick={() => setModal(null)}><X size={17} /> Cancel</Button><Button variant={modal === 'scrap' ? 'danger' : 'primary'} disabled={busy || (modal === 'transfer' ? transferToolingBlocked : scrapToolingBlocked)}>{busy ? 'Saving…' : modal === 'scrap' ? 'Confirm scrap' : 'Transfer'}</Button></div></form></Modal>}
+    {scannerOpen && <ProductionQrScanner onClose={closeScanner} />}
   </main>
 }
