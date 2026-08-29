@@ -42,6 +42,10 @@ export function ProductionQrScanner({ onClose }: { onClose: () => void }) {
             setError(reason instanceof Error ? reason.message : 'Scan a ShopCore traveler QR code.')
           }
         }, {
+          onDecodeError: (reason) => {
+            if (!active || reason === QrScanner.NO_QR_CODE_FOUND) return
+            setError(typeof reason === 'string' ? reason : 'The QR decoder stopped working. Close the scanner and try again.')
+          },
           preferredCamera: 'environment',
           maxScansPerSecond: 10,
           highlightScanRegion: true,
