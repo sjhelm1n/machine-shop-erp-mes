@@ -55,45 +55,6 @@ Supabase is the trusted boundary:
 
 There is no custom API server or service-role key in the browser.
 
-## Data-model resolutions
-
-The initial brief left four small production questions open. This implementation resolves them as follows:
-
-1. **First-step quantity:** creating a work order inserts a `release` event equal to ordered quantity. An `adjustment` event can add a documented overrun without changing the accepted order quantity. Seed data demonstrates a release of 102 against an order for 100.
-2. **Step completion:** a step is complete when it has entered quantity, has activity, has zero remaining quantity, and every upstream step also has zero remaining quantity. This provides the brief’s “no additional upstream quantity expected” rule without a manual status.
-3. **Undo:** events are never updated or deleted. For five minutes, undo can add a `reversal` event referencing the original transfer or scrap; the database rejects late or duplicate reversals.
-4. **Portal stages:** internal routing and customer-visible stages are stored separately. Private database functions aggregate the synchronized stage mappings and immutable events, then public security-invoker wrappers return only safe percentages and stage names. Customer users cannot query the underlying mappings or events.
-
-## Routing calculations
-
-For each routing step, ignoring events that have a later reversal:
-
-```text
-entered = release/adjustment at this step + transfers into this step
-transferred = transfers out of this step (a null destination means final completion)
-scrapped = scrap events at this step
-available = entered - transferred - scrapped
-processed = transferred + scrapped
-```
-
-The database rejects a transfer or scrap when `quantity > available`. It does not compare the event quantity with `quantity_ordered`, so overproduction is allowed.
-
-Work-order customer progress is quantity-aware across every routing step:
-
-```text
-sum(min(step processed, quantity ordered))
------------------------------------------------- × 100
-quantity ordered × number of routing steps
-```
-
-The result is capped at 100%. Sales-order progress is the quantity-weighted average of its work-order percentages, using each work order’s ordered quantity as the weight. Scrap counts as processing at the step where the work occurred but reduces the good quantity available downstream.
-
-Timestamps are derived from active events:
-
-- **Entered at:** first release/adjustment or inbound transfer (the first step falls back to `released_at`).
-- **Started at:** first transfer or scrap associated with the step.
-- **Completed at:** latest relevant event when the completion rule above becomes true.
-
 ## Local setup
 
 Requirements: Node.js 20+ and npm.
